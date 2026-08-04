@@ -420,6 +420,30 @@ body {
   border-color: var(--primary-gold);
 }
 
+/* Campo e Alinhamento do CNAE */
+.cnae-input-wrapper {
+  max-width: 185px;
+  width: 100%;
+}
+
+.cnae-input-wrapper input {
+  width: 100%;
+  padding: 0.85rem 1.2rem;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-main);
+  font-size: 1rem;
+  backdrop-filter: blur(10px);
+  outline: none;
+  text-align: center;
+  transition: border-color var(--transition-fast);
+}
+
+.cnae-input-wrapper input:focus {
+  border-color: var(--primary-gold);
+}
+
 .btn-search {
   background: linear-gradient(135deg, var(--primary-gold), var(--primary-red));
   color: #fff;
@@ -436,6 +460,20 @@ body {
 
 .btn-search:hover {
   transform: scale(1.02);
+}
+
+@media (max-width: 750px) {
+  .search-box {
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+  .cnae-input-wrapper {
+    max-width: 100%;
+  }
+  .btn-search {
+    padding: 0.85rem;
+    justify-content: center;
+  }
 }
 
 .suggestions-list {
@@ -513,6 +551,60 @@ body {
   background: rgba(230, 161, 0, 0.2);
   border-color: rgba(230, 161, 0, 0.4);
   color: #ffc233;
+}
+
+/* --- Card de Parecer do CNAE (Cruzamento) --- */
+.cnae-verdict-box {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px dashed var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .cnae-verdict-box {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.cnae-verdict-box.hidden {
+  display: none;
+}
+
+.cnae-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.cnae-badge-apto {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--status-apto);
+  border: 1px solid var(--status-apto);
+}
+
+.cnae-badge-inapto {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--status-inapto);
+  border: 1px solid var(--status-inapto);
+}
+
+.cnae-badge-vistoria {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--status-vistoria);
+  border: 1px solid var(--status-vistoria);
+}
+
+.cnae-justificativa-text {
+  font-size: 0.85rem;
+  color: var(--text-main);
+  line-height: 1.45;
 }
 
 /* --- Tags de Atividades Permitidas (Usos) --- */
