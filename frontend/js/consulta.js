@@ -4,6 +4,10 @@ let tipoComercioSelecionado = "ambulante";
 let debounceTimeout;
 
 document.addEventListener("DOMContentLoaded", () => {
+  // 1. Recupera o último estado do switch salvo no navegador (padrão é ambulante)
+  tipoComercioSelecionado = localStorage.getItem("last_tipo_comercio") || "ambulante";
+  setTipoComercio(tipoComercioSelecionado);
+
   // Inicializa o mapa centralizado em Sorocaba
   map = L.map("map").setView([-23.5015, -47.4581], 13);
 
@@ -20,7 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const suggestionsList = document.getElementById("suggestions-list");
 
   if (addressInput && suggestionsList) {
-    // Escuta teclado: tecla Enter dispara a busca
+    // Escuta teclado: tecla Enter dispara a busca imediata
     addressInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -29,7 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    // Escuta digitação: Busca Preditiva (debounced)
+    // Escuta digitação: Busca Preditiva (com debounce de 400ms)
     addressInput.addEventListener("input", () => {
       clearTimeout(debounceTimeout);
       const query = addressInput.value.trim();
@@ -59,7 +63,6 @@ async function carregarSugestoes(query) {
   const suggestionsList = document.getElementById("suggestions-list");
   if (!suggestionsList) return;
 
-  // Busca focada em Sorocaba, SP
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(query + ", Sorocaba, SP")}`;
 
   try {
@@ -76,7 +79,6 @@ async function carregarSugestoes(query) {
         const div = document.createElement("div");
         div.className = "suggestion-item";
         
-        // Formata o texto separando o nome principal do restante do endereço
         const parts = item.display_name.split(",");
         const mainTitle = parts[0].trim();
         const details = parts.slice(1).map(p => p.trim()).filter(p => !p.includes("Brasil") && !p.includes("Estado de São Paulo") && !p.includes("Região Metropolitana")).join(", ");
@@ -87,7 +89,6 @@ async function carregarSugestoes(query) {
           document.getElementById("address-input").value = item.display_name;
           suggestionsList.classList.add("hidden");
           
-          // Centraliza no mapa e valida
           const lat = parseFloat(item.lat);
           const lon = parseFloat(item.lon);
           map.setView([lat, lon], 17);
@@ -105,12 +106,18 @@ async function carregarSugestoes(query) {
   }
 }
 
-// Controla a mudança do switch de tipo de comércio
+// Altera e persiste no localStorage a modalidade comercial
 function setTipoComercio(tipo) {
   tipoComercioSelecionado = tipo;
+  localStorage.setItem("last_tipo_comercio", tipo);
   
-  document.getElementById("opt-ambulante").classList.toggle("active", tipo === "ambulante");
-  document.getElementById("opt-fixo").classList.toggle("active", tipo === "fixo");
+  const optAmbulante = document.getElementById("opt-ambulante");
+  const optFixo = document.getElementById("opt-fixo");
+
+  if (optAmbulante && optFixo) {
+    optAmbulante.classList.toggle("active", tipo === "ambulante");
+    optFixo.classList.toggle("active", tipo === "fixo");
+  }
 
   // Se já houver um marcador no mapa, reavalia a viabilidade para a nova modalidade
   if (marker) {
@@ -181,10 +188,38 @@ function exibirResultado(data) {
 
   resultCard.classList.remove("hidden");
   document.getElementById("res-tipo").textContent = data.tipo || (tipoComercioSelecionado === "ambulante" ? "Comércio Ambulante" : "Comércio Fixo");
-  document.getElementById("res-zona").textContent = data.zona;
+
+  // Extrai e separa o código do zoneamento (ex: "ZR1") da descrição (ex: "Zona Residencial 1")
+  let zonaCodigo = "ZM";
+  let zonaDesc = data.zona || "Zona Mista";
+
+  if (data.zona) {
+    if (data.zona.includes(" - ")) {
+      const parts = data.zona.split(" - ");
+      zonaCodigo = parts[0].trim();
+      zonaDesc = parts[1].trim();
+    } else {
+      // Fallback inteligente caso a API retorne sem o hífen padrão
+      if (data.zona.toLowerCase().includes("mista")) {
+        zonaCodigo = "ZM";
+      } else if (data.zona.toLowerCase().includes("central")) {
+        zonaCodigo = "ZC";
+      } else if (data.zona.toLowerCase().includes("residencial 1") || data.zona.toLowerCase().includes("zr1")) {
+        zonaCodigo = "ZR1";
+      } else if (data.zona.toLowerCase().includes("preservação") || data.zona.toLowerCase().includes("zca")) {
+        zonaCodigo = "ZCA";
+      } else {
+        zonaCodigo = data.zona.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, "");
+      }
+    }
+  }
+
+  // Preenche os campos separados no parecer
+  document.getElementById("res-zona-codigo").textContent = zonaCodigo;
+  document.getElementById("res-zona").textContent = zonaDesc;
   document.getElementById("res-justificativa").textContent = data.justificativa;
 
-  // Preenche a lista de requisitos municipais trazidos da legislação
+  // Preenche a lista de requisitos municipais
   reqList.innerHTML = "";
   if (data.requisitos_legais && data.requisitos_legais.length > 0) {
     data.requisitos_legais.forEach(req => {
@@ -194,7 +229,6 @@ function exibirResultado(data) {
       li.style.gap = "6px";
       li.style.marginBottom = "6px";
       
-      // Ícone outline de seta/item da lista
       li.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right" style="flex-shrink:0; margin-top:2px; color:var(--primary-gold);"><polyline points="9 18 15 12 9 6"></polyline></svg>
         <span>${req}</span>
@@ -203,7 +237,7 @@ function exibirResultado(data) {
     });
   }
 
-  // Estiliza o Badge do Parecer injetando o ícone SVG correspondente
+  // Estiliza o Badge do Parecer
   badge.className = "badge";
   if (data.parecer === "Apto") {
     badge.classList.add("badge-apto");
