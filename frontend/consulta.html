@@ -20,7 +20,7 @@
     </header>
 
     <main class="content">
-      <!-- Seletor Switch: Ambulante vs Fixo (search-card-container para z-index) -->
+      <!-- Seletor Switch: Ambulante vs Fixo -->
       <div class="glass-card search-card-container">
         <div class="trade-type-container">
           <div class="trade-type-selector">
@@ -60,7 +60,12 @@
         <p style="margin-top: 10px;"><strong>Modalidade:</strong> <span id="res-tipo"></span></p>
         <p><strong>Zonamento Código:</strong> <span id="res-zona-codigo" class="zone-code-tag"></span></p>
         <p><strong>Descrição da Zona (Lei 13.123/2025):</strong> <span id="res-zona"></span></p>
-        <p><strong>Justificativa Legal:</strong></p>
+        
+        <!-- Bloco Minimalista de Usos Permitidos -->
+        <p style="margin-top: 10px;"><strong>Categorias de Uso Permitidas (Art. 118):</strong></p>
+        <div id="res-usos-permitidos" class="uses-container"></div>
+
+        <p style="margin-top: 10px;"><strong>Justificativa Legal:</strong></p>
         <p id="res-justificativa" class="justificativa-text"></p>
         
         <div id="req-container" style="margin-top: 12px; text-align: left;">
