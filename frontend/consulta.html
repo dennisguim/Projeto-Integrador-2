@@ -20,19 +20,18 @@
     </header>
 
     <main class="content">
-      <!-- Seletor Switch: Ambulante vs Fixo -->
-      <div class="glass-card">
-        <label style="font-weight: 600; display: block; margin-bottom: 8px; font-size: 0.9rem;">
-          Selecione a Modalidade Pretendida:
-        </label>
-        <div class="trade-type-selector">
-          <div class="trade-option active" id="opt-ambulante" onclick="setTipoComercio('ambulante')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shopping-cart"><circle cx="8" cy="21" r="1"></circle><circle cx="19" cy="21" r="1"></circle><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"></path></svg>
-            Comércio Ambulante
-          </div>
-          <div class="trade-option" id="opt-fixo" onclick="setTipoComercio('fixo')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-building-2"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"></path><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"></path><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"></path><path d="M10 6h4"></path><path d="M10 10h4"></path><path d="M10 14h4"></path><path d="M10 18h4"></path></svg>
-            Comércio Fixo
+      <!-- Seletor Switch: Ambulante vs Fixo (search-card-container para z-index) -->
+      <div class="glass-card search-card-container">
+        <div class="trade-type-container">
+          <div class="trade-type-selector">
+            <button class="trade-option active" id="opt-ambulante" onclick="setTipoComercio('ambulante')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shopping-cart"><circle cx="8" cy="21" r="1"></circle><circle cx="19" cy="21" r="1"></circle><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"></path></svg>
+              Ambulante
+            </button>
+            <button class="trade-option" id="opt-fixo" onclick="setTipoComercio('fixo')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-building-2"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"></path><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"></path><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"></path><path d="M10 6h4"></path><path d="M10 10h4"></path><path d="M10 14h4"></path><path d="M10 18h4"></path></svg>
+              Fixo
+            </button>
           </div>
         </div>
 
@@ -59,7 +58,8 @@
         <h3>Parecer de Viabilidade</h3>
         <div id="parecer-badge" class="badge"></div>
         <p style="margin-top: 10px;"><strong>Modalidade:</strong> <span id="res-tipo"></span></p>
-        <p><strong>Zoneamento (Lei 13.123/2025):</strong> <span id="res-zona"></span></p>
+        <p><strong>Zonamento Código:</strong> <span id="res-zona-codigo" class="zone-code-tag"></span></p>
+        <p><strong>Descrição da Zona (Lei 13.123/2025):</strong> <span id="res-zona"></span></p>
         <p><strong>Justificativa Legal:</strong></p>
         <p id="res-justificativa" class="justificativa-text"></p>
         
