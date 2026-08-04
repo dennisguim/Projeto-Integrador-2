@@ -384,10 +384,10 @@ body {
   border-radius: 16px;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
-  position: relative; /* Mantido para contexto de empilhamento */
+  position: relative;
 }
 
-/* Container do Buscador (z-index alto para sugestões ficarem em cima do mapa) */
+/* Container do Buscador (z-index alto para sugestões) */
 .search-card-container {
   z-index: 20;
 }
@@ -451,7 +451,7 @@ body {
   box-shadow: var(--glass-shadow);
   max-height: 240px;
   overflow-y: auto;
-  z-index: 9999; /* Z-Index extremo para sobressair sobre qualquer painel */
+  z-index: 9999;
   display: flex;
   flex-direction: column;
   padding: 6px;
@@ -515,6 +515,43 @@ body {
   color: #ffc233;
 }
 
+/* --- Tags de Atividades Permitidas (Usos) --- */
+.uses-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.use-tag {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--glass-border);
+  color: var(--text-main);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: help;
+  position: relative;
+  transition: all var(--transition-fast);
+}
+
+.use-tag:hover {
+  background: var(--primary-gold);
+  color: #ffffff;
+  border-color: var(--primary-gold);
+}
+
+[data-theme="dark"] .use-tag {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .use-tag:hover {
+  background: var(--primary-gold);
+  color: #0f172a;
+}
+
 /* --- Ícones SVG Geral --- */
 svg.lucide {
   stroke-width: 2;
@@ -557,7 +594,7 @@ svg.lucide {
 .badge-vistoria { background: rgba(245, 158, 11, 0.2); color: var(--status-vistoria); }
 
 .map-card {
-  z-index: 1; /* Z-Index menor que o buscador */
+  z-index: 1;
   padding: 0;
   overflow: hidden;
 }
