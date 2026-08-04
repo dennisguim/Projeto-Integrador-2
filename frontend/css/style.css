@@ -267,3 +267,37 @@ body[data-theme="dark"] {
   border-top: 1px solid var(--glass-border);
   backdrop-filter: blur(10px);
 }
+
+/* --- Switch de Seleção de Tipo de Comércio --- */
+.trade-type-selector {
+  display: flex;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 1rem;
+  gap: 4px;
+}
+
+.trade-option {
+  flex: 1;
+  text-align: center;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  user-select: none;
+  color: var(--text-muted);
+}
+
+.trade-option.active {
+  background: var(--primary-color);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 114, 206, 0.4);
+}
+
+body.light-mode .trade-type-selector {
+  background: rgba(0, 0, 0, 0.05);
+}
