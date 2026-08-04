@@ -58,8 +58,12 @@ body {
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-body[data-theme="dark"] {
+/* Ajuste do Modo Escuro */
+[data-theme="dark"] body {
   background: var(--bg-dark);
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(230, 161, 0, 0.04) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(192, 41, 43, 0.04) 0px, transparent 50%);
 }
 
 /* Cabeçalho */
@@ -315,42 +319,59 @@ body[data-theme="dark"] {
   backdrop-filter: blur(10px);
 }
 
-/* --- Switch de Seleção de Tipo de Comércio --- */
-.trade-type-selector {
+/* --- Switch de Seleção Menor e Elegante (Pill Switch) --- */
+.trade-type-container {
   display: flex;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 4px;
-  margin-bottom: 1rem;
-  gap: 4px;
+  justify-content: center;
+  margin-bottom: 1.2rem;
+}
+
+.trade-type-selector {
+  display: inline-flex;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--glass-border);
+  border-radius: 30px;
+  padding: 3px;
+  gap: 2px;
+  max-width: 320px;
+  width: 100%;
+}
+
+[data-theme="dark"] .trade-type-selector {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .trade-option {
   flex: 1;
   text-align: center;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 0.9rem;
+  padding: 8px 12px;
+  border-radius: 25px;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all var(--transition-fast);
   user-select: none;
   color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
+  border: none;
+  background: transparent;
 }
 
 .trade-option.active {
-  background: var(--primary-color, var(--primary-gold));
+  background: var(--primary-gold);
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(230, 161, 0, 0.35);
+  box-shadow: 0 2px 8px rgba(230, 161, 0, 0.3);
 }
 
-body.light-mode .trade-type-selector {
-  background: rgba(0, 0, 0, 0.05);
+.trade-option svg.lucide {
+  transition: stroke var(--transition-fast);
+}
+
+.trade-option.active svg.lucide {
+  stroke: #ffffff;
 }
 
 /* --- Glass Card Geral --- */
@@ -363,6 +384,12 @@ body.light-mode .trade-type-selector {
   border-radius: 16px;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
+  position: relative; /* Mantido para contexto de empilhamento */
+}
+
+/* Container do Buscador (z-index alto para sugestões ficarem em cima do mapa) */
+.search-card-container {
+  z-index: 20;
 }
 
 /* --- Busca Preditiva (Autocomplete) --- */
@@ -424,7 +451,7 @@ body.light-mode .trade-type-selector {
   box-shadow: var(--glass-shadow);
   max-height: 240px;
   overflow-y: auto;
-  z-index: 1000;
+  z-index: 9999; /* Z-Index extremo para sobressair sobre qualquer painel */
   display: flex;
   flex-direction: column;
   padding: 6px;
@@ -444,7 +471,7 @@ body.light-mode .trade-type-selector {
 }
 
 .suggestion-item:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 [data-theme="light"] .suggestion-item:hover {
@@ -466,6 +493,26 @@ body.light-mode .trade-type-selector {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* --- Tag do Código de Zoneamento --- */
+.zone-code-tag {
+  display: inline-block;
+  background: rgba(230, 161, 0, 0.12);
+  color: var(--primary-gold);
+  border: 1px solid rgba(230, 161, 0, 0.3);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+  margin-left: 6px;
+}
+
+[data-theme="dark"] .zone-code-tag {
+  background: rgba(230, 161, 0, 0.2);
+  border-color: rgba(230, 161, 0, 0.4);
+  color: #ffc233;
 }
 
 /* --- Ícones SVG Geral --- */
@@ -510,6 +557,7 @@ svg.lucide {
 .badge-vistoria { background: rgba(245, 158, 11, 0.2); color: var(--status-vistoria); }
 
 .map-card {
+  z-index: 1; /* Z-Index menor que o buscador */
   padding: 0;
   overflow: hidden;
 }
@@ -518,6 +566,15 @@ svg.lucide {
   width: 100%;
   height: 480px;
   z-index: 1;
+}
+
+/* Filtro do Mapa no Modo Escuro */
+[data-theme="dark"] .leaflet-tile-container {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+
+[data-theme="dark"] .leaflet-container {
+  background: #1e293b;
 }
 
 .justificativa-text {
