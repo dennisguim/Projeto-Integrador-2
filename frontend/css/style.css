@@ -23,9 +23,10 @@
   --status-vistoria: #f59e0b;
 
   --transition-fast: 0.25s ease;
+  --border-color: rgba(0, 0, 0, 0.1);
 }
 
-/* Tema Escuro Automatico/Manual */
+/* Tema Escuro */
 [data-theme="dark"] {
   --glass-bg: rgba(30, 41, 59, 0.75);
   --glass-border: rgba(255, 255, 255, 0.08);
@@ -33,6 +34,7 @@
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --card-hover: rgba(51, 65, 85, 0.9);
+  --border-color: rgba(255, 255, 255, 0.1);
 }
 
 /* Reset Global */
@@ -132,7 +134,7 @@ body[data-theme="dark"] {
   box-shadow: 0 0 8px var(--status-apto);
 }
 
-/* Theme Toggle Button */
+/* Theme & IconButton */
 .btn-icon {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
@@ -150,6 +152,52 @@ body[data-theme="dark"] {
 .btn-icon:hover {
   transform: translateY(-2px);
   background: var(--card-hover);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Layout Geral */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.content {
+  flex: 1;
+  max-width: 900px;
+  width: 100%;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-main);
+  padding: 8px 16px;
+  border-radius: 20px;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.back-btn:hover {
+  transform: translateX(-3px);
+  background: var(--card-hover);
+  box-shadow: var(--glass-shadow);
+}
+
+.back-btn svg {
+  transition: transform var(--transition-fast);
+}
+
+.back-btn:hover svg {
+  transform: translateX(-2px);
 }
 
 /* Container Principal */
@@ -244,7 +292,6 @@ body[data-theme="dark"] {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.6rem;
 }
 
 .card-title {
@@ -290,14 +337,200 @@ body[data-theme="dark"] {
   transition: all 0.3s ease;
   user-select: none;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .trade-option.active {
-  background: var(--primary-color);
+  background: var(--primary-color, var(--primary-gold));
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 114, 206, 0.4);
+  box-shadow: 0 4px 12px rgba(230, 161, 0, 0.35);
 }
 
 body.light-mode .trade-type-selector {
   background: rgba(0, 0, 0, 0.05);
+}
+
+/* --- Glass Card Geral --- */
+.glass-card {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* --- Busca Preditiva (Autocomplete) --- */
+.search-box {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.search-input-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.search-input-wrapper input {
+  width: 100%;
+  padding: 0.85rem 1.2rem;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-main);
+  font-size: 1rem;
+  backdrop-filter: blur(10px);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.search-input-wrapper input:focus {
+  border-color: var(--primary-gold);
+}
+
+.btn-search {
+  background: linear-gradient(135deg, var(--primary-gold), var(--primary-red));
+  color: #fff;
+  border: none;
+  padding: 0 1.5rem;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-search:hover {
+  transform: scale(1.02);
+}
+
+.suggestions-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 100%;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: var(--glass-shadow);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  gap: 2px;
+}
+
+.suggestions-list.hidden {
+  display: none;
+}
+
+.suggestion-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  text-align: left;
+}
+
+.suggestion-item:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="light"] .suggestion-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.suggestion-item strong {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 2px;
+}
+
+.suggestion-item span {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Ícones SVG Geral --- */
+svg.lucide {
+  stroke-width: 2;
+  fill: none;
+  stroke: currentColor;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.card-icon svg.lucide {
+  width: 28px;
+  height: 28px;
+  stroke: var(--primary-gold);
+  transition: transform 0.3s ease;
+}
+
+.card-primary .card-icon svg.lucide {
+  stroke: #ffffff;
+}
+
+.hub-card:hover .card-icon svg.lucide {
+  transform: scale(1.12);
+}
+
+/* Badge do Parecer */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.88rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-apto { background: rgba(16, 185, 129, 0.2); color: var(--status-apto); }
+.badge-inapto { background: rgba(239, 68, 68, 0.2); color: var(--status-inapto); }
+.badge-vistoria { background: rgba(245, 158, 11, 0.2); color: var(--status-vistoria); }
+
+.map-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+#map {
+  width: 100%;
+  height: 480px;
+  z-index: 1;
+}
+
+.justificativa-text {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 3px solid var(--primary-gold);
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-top: 6px;
+}
+
+[data-theme="light"] .justificativa-text {
+  background: rgba(0, 0, 0, 0.03);
 }
