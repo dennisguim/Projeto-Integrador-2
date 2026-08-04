@@ -3,19 +3,53 @@ let marker;
 let tipoComercioSelecionado = "ambulante";
 let debounceTimeout;
 
+// Dicionário de descrições completas dos usos (exibidos no tooltip/hover)
+const DESCRICOES_USO = {
+  CSI: "Comércio, Serviços e Indústria de Pequeno Porte (padarias, farmácias, mercados locais, lojas)",
+  SEAP: "Serviço e Atividade de Apoio (escritórios administrativos, clínicas médicas, odontológicas, salões de beleza)",
+  EVC: "Escritório Virtual e de Contato (Coworkings e sedes fiscais sem movimentação de estoque)",
+  PGTI: "Polo Gerador de Tráfego de Veículos (Supermercados, shoppings, agências bancárias, grandes academias)",
+  PGTP: "Polo Gerador de Tráfego Pesado (Transportadoras, depósitos de materiais pesados, frotas de caminhões)",
+  GRN: "Gerador de Ruído Noturno (Funcionamento das 22h às 06h: bares, casas de eventos, buffets)",
+  GRD: "Gerador de Ruído Diurno (Oficinas mecânicas, serralherias, indústrias barulhentas)",
+  TL: "Turismo e Lazer (Hotéis-fazenda, clubes de campo, parques temáticos)",
+  UAI: "Uso de Alta Incomodidade (Depósito de GLP/gás, postos de combustíveis, indústrias químicas)",
+  UE: "Uso Especial (Reservatórios, cemitérios, museus, escolas, hospitais, órgãos públicos)",
+  AAP: "Atividades Agropastoris (Cultivos agrícolas, criação de animais, agronegócio e feiras de produtores)"
+};
+
+// Matriz de permissão do Art. 118 do Plano Diretor de Sorocaba
+const MAPEAMENTO_USOS = {
+  ZC: ["CSI", "SEAP", "EVC", "PGTI", "GRN", "GRD", "TL", "UE"],
+  ZPI: ["CSI", "SEAP", "EVC", "PGTI", "GRN", "GRD", "TL", "UE"],
+  ZR1: ["SEAP", "EVC", "UE"],
+  ZR2: ["CSI", "SEAP", "EVC", "TL", "UE"],
+  ZR3: ["CSI", "SEAP", "EVC", "TL", "UE"],
+  ZR3EXP: ["CSI", "SEAP", "EVC", "TL", "UE"],
+  ZRDS: ["SEAP", "EVC", "UE"],
+  ZI1: ["CSI", "EVC", "PGTP", "PGTI", "GRN", "GRD", "UAI", "UE"],
+  ZI2: ["CSI", "EVC", "PGTP", "PGTI", "GRN", "GRD", "UE"],
+  ZAE: ["CSI", "SEAP", "EVC", "PGTP", "PGTI", "GRN", "GRD", "UE"],
+  ZCH: ["EVC", "TL", "UE"],
+  ZCA: ["EVC", "TL", "UE"],
+  CCS1: ["CSI", "SEAP", "EVC", "TL", "UE"],
+  CCS2: ["CSI", "SEAP", "EVC", "PGTI", "GRN", "GRD", "TL", "UE"],
+  CCI: ["CSI", "SEAP", "EVC", "PGTP", "PGTI", "GRN", "GRD", "UE"],
+  CCR: ["CSI", "SEAP", "EVC", "PGTP", "PGTI", "GRD", "GRN", "TL", "UE"],
+  ZRURAL: ["CSI", "EVC", "PGTI", "PGTP", "TL", "UAI", "UE", "AAP"],
+  AEIP: ["CSI", "SEAP", "EVC", "UE"]
+};
+
 document.addEventListener("DOMContentLoaded", () => {
-  // 1. Recupera o último estado do switch salvo no navegador (padrão é ambulante)
   tipoComercioSelecionado = localStorage.getItem("last_tipo_comercio") || "ambulante";
   setTipoComercio(tipoComercioSelecionado);
 
-  // Inicializa o mapa centralizado em Sorocaba
   map = L.map("map").setView([-23.5015, -47.4581], 13);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: '© OpenStreetMap contributors | Prefeitura de Sorocaba'
   }).addTo(map);
 
-  // Clique direto no mapa para consultar
   map.on("click", (e) => {
     validarPonto(e.latlng.lat, e.latlng.lng, "Ponto selecionado via mapa");
   });
@@ -24,7 +58,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const suggestionsList = document.getElementById("suggestions-list");
 
   if (addressInput && suggestionsList) {
-    // Escuta teclado: tecla Enter dispara a busca imediata
     addressInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -33,7 +66,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    // Escuta digitação: Busca Preditiva (com debounce de 400ms)
     addressInput.addEventListener("input", () => {
       clearTimeout(debounceTimeout);
       const query = addressInput.value.trim();
@@ -49,7 +81,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }, 400);
     });
 
-    // Ocultar sugestões ao clicar fora do campo de busca
     document.addEventListener("click", (e) => {
       if (e.target !== addressInput && e.target !== suggestionsList && !suggestionsList.contains(e.target)) {
         suggestionsList.classList.add("hidden");
@@ -58,7 +89,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// Busca preditiva de endereços via Nominatim
 async function carregarSugestoes(query) {
   const suggestionsList = document.getElementById("suggestions-list");
   if (!suggestionsList) return;
@@ -106,7 +136,6 @@ async function carregarSugestoes(query) {
   }
 }
 
-// Altera e persiste no localStorage a modalidade comercial
 function setTipoComercio(tipo) {
   tipoComercioSelecionado = tipo;
   localStorage.setItem("last_tipo_comercio", tipo);
@@ -119,7 +148,6 @@ function setTipoComercio(tipo) {
     optFixo.classList.toggle("active", tipo === "fixo");
   }
 
-  // Se já houver um marcador no mapa, reavalia a viabilidade para a nova modalidade
   if (marker) {
     const latlng = marker.getLatLng();
     validarPonto(latlng.lat, latlng.lng, "Reavaliação de modalidade");
@@ -185,11 +213,12 @@ function exibirResultado(data) {
   const resultCard = document.getElementById("result-card");
   const badge = document.getElementById("parecer-badge");
   const reqList = document.getElementById("res-requisitos");
+  const usesContainer = document.getElementById("res-usos-permitidos");
 
   resultCard.classList.remove("hidden");
   document.getElementById("res-tipo").textContent = data.tipo || (tipoComercioSelecionado === "ambulante" ? "Comércio Ambulante" : "Comércio Fixo");
 
-  // Extrai e separa o código do zoneamento (ex: "ZR1") da descrição (ex: "Zona Residencial 1")
+  // Extrai e separa o código do zoneamento
   let zonaCodigo = "ZM";
   let zonaDesc = data.zona || "Zona Mista";
 
@@ -199,7 +228,6 @@ function exibirResultado(data) {
       zonaCodigo = parts[0].trim();
       zonaDesc = parts[1].trim();
     } else {
-      // Fallback inteligente caso a API retorne sem o hífen padrão
       if (data.zona.toLowerCase().includes("mista")) {
         zonaCodigo = "ZM";
       } else if (data.zona.toLowerCase().includes("central")) {
@@ -218,6 +246,22 @@ function exibirResultado(data) {
   document.getElementById("res-zona-codigo").textContent = zonaCodigo;
   document.getElementById("res-zona").textContent = zonaDesc;
   document.getElementById("res-justificativa").textContent = data.justificativa;
+
+  // Injeta as tags de usos permitidos de forma minimalista
+  if (usesContainer) {
+    usesContainer.innerHTML = "";
+    // Recupera a lista de categorias de uso da zona (código sanitizado em uppercase)
+    const normalizedKey = zonaCodigo.toUpperCase().replace("-E", "EXP");
+    const usosPermitidos = MAPEAMENTO_USOS[normalizedKey] || ["CSI", "SEAP", "EVC", "UE"];
+
+    usosPermitidos.forEach(uso => {
+      const span = document.createElement("span");
+      span.className = "use-tag";
+      span.textContent = uso;
+      span.title = DESCRICOES_USO[uso] || "Uso Urbano";
+      usesContainer.appendChild(span);
+    });
+  }
 
   // Preenche a lista de requisitos municipais
   reqList.innerHTML = "";
