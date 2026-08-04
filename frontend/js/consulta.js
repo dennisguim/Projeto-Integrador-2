@@ -10,8 +10,8 @@ const DESCRICOES_USO = {
   EVC: "Escritório Virtual e de Contato (Coworkings e sedes fiscais sem movimentação de estoque)",
   PGTI: "Polo Gerador de Tráfego de Veículos (Supermercados, shoppings, agências bancárias, grandes academias)",
   PGTP: "Polo Gerador de Tráfego Pesado (Transportadoras, depósitos de materiais pesados, frotas de caminhões)",
-  GRN: "Gerador de Ruído Noturno (Funcionamento das 22h às 06h: bares, casas de eventos, buffets)",
-  GRD: "Gerador de Ruído Diurno (Oficinas mecânicas, serralherias, indústrias barulhentas)",
+  GRN: "Gerador de Ruído Noturno (Funcionamento das 22h às 06h: bares, casas de eventos, buffets, shows)",
+  GRD: "Gerador de Ruído Diurno (Oficinas mecânicas, serralherias, indústrias barulhentas, academias de grande porte)",
   TL: "Turismo e Lazer (Hotéis-fazenda, clubes de campo, parques temáticos)",
   UAI: "Uso de Alta Incomodidade (Depósito de GLP/gás, postos de combustíveis, indústrias químicas)",
   UE: "Uso Especial (escolas, hospitais, cemitérios, infraestrutura, órgãos públicos)",
@@ -44,8 +44,13 @@ const MAPEAMENTO_USOS = {
 const BANCO_CNAE = {
   "4781400": { desc: "Comércio varejista de artigos do vestuário e acessórios (Lojas de Roupas)", cat: "CSI" },
   "4711302": { desc: "Comércio varejista de mercadorias em geral (Supermercados)", cat: "PGTI" },
-  "5611201": { desc: "Restaurantes e similares", cat: "CSI" },
+  "5611201": { desc: "Restaurantes e similares (Alimentação Silenciosa)", cat: "CSI" },
   "5611203": { desc: "Lanchonetes, casas de chá, de sucos e similares", cat: "CSI" },
+  "5611205": { desc: "Bares e outros estabelecimentos de bebidas com ou sem entretenimento/música ao vivo", cat: "GRN" },
+  "9001902": { desc: "Produção musical e casas de espetáculos com música ao vivo (Shows)", cat: "GRN" },
+  "9329899": { desc: "Outras atividades de recreação, entretenimento e lazer (Casas noturnas / Jogos)", cat: "GRN" },
+  "9321800": { desc: "Parques de diversão e parques temáticos (Recreação ao ar livre)", cat: "TL" },
+  "9313100": { desc: "Academias de ginástica e centros esportivos (Ruído Diurno)", cat: "GRD" },
   "4721102": { desc: "Padaria e confeitaria com predominância de revenda", cat: "CSI" },
   "4771701": { desc: "Comércio varejista de produtos farmacêuticos (Farmácias)", cat: "CSI" },
   "4930202": { desc: "Transporte rodoviário de carga (Transportadoras)", cat: "PGTP" },
@@ -54,7 +59,7 @@ const BANCO_CNAE = {
   "9602501": { desc: "Serviços de cabeleireiros, manicure, pedicure (Salões de Beleza)", cat: "SEAP" },
   "7020400": { desc: "Atividades de consultoria em gestão empresarial (Escritórios)", cat: "SEAP" },
   "6201500": { desc: "Desenvolvimento de programas de computador sob encomenda", cat: "EVC" },
-  "4744099": { desc: "Comércio varejista de materiais de construção em geral (Materials Grosseiros)", cat: "PGTP" },
+  "4744099": { desc: "Comércio varejista de materiais de construção em geral (Materiais Grosseiros)", cat: "PGTP" },
   "4784900": { desc: "Comércio varejista de gás liquefeito de petróleo (Depósito de Gás GLP)", cat: "UAI" },
   "4731800": { desc: "Comércio varejista de combustíveis para veículos automotores (Postos)", cat: "UAI" },
   "0811900": { desc: "Extração de areia, cascalho ou pedregulho (Mineração)", cat: "UAI" },
@@ -265,7 +270,17 @@ async function analisarAtividadeCNAE(cnaeString) {
   const div = parseInt(clean.substring(0, 2));
   if (isNaN(div)) return null;
 
-  if (div >= 1 && div <= 3) {
+  // Detecção específica para Bares com Entretenimento ou Recreação Noturna
+  if (clean.startsWith("5611205") || div === 90 || clean.startsWith("9329")) {
+    cat = "GRN";
+    if (!desc) desc = "Bares, Espetáculos ou Recreação com Entretenimento Noturno (Gerador de Ruído)";
+  } else if (clean.startsWith("9313") || clean.startsWith("9319")) {
+    cat = "GRD";
+    if (!desc) desc = "Academias de ginástica ou centros esportivos de grande porte";
+  } else if (clean.startsWith("9321")) {
+    cat = "TL";
+    if (!desc) desc = "Parques temáticos e de diversão";
+  } else if (div >= 1 && div <= 3) {
     cat = "AAP";
     if (!desc) desc = "Atividades Agropastoris / Pesca (CNAE Geral)";
   } else if (div >= 5 && div <= 9) {
@@ -411,7 +426,7 @@ async function exibirResultado(data) {
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
           Atividade Proibida
         `;
-        cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE classificado em <strong>${atividade.cat}</strong>) é <strong>VEDADA</strong> para este zoneamento. A zona <strong>${zonaCodigo}</strong> não admite a categoria <strong>${atividade.cat}</strong>.`;
+        cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE classificado em <strong>${atividade.cat}</strong>) é <strong>VEDADA</strong> para este zoneamento. A zona <strong>${zonaCodigo}</strong> não admite a categoria <strong>${atividade.cat}</strong> (excesso de ruído noturno ou impacto urbano incompatível).`;
       }
     } else {
       cnaeVerdictBox.classList.add("hidden");
