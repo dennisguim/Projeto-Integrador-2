@@ -35,12 +35,17 @@
           </div>
         </div>
 
-        <!-- Campo de Pesquisa com Autocomplete -->
+        <!-- Campo de Pesquisa com Autocomplete + Entrada Opcional do CNAE -->
         <div class="search-box">
           <div class="search-input-wrapper">
             <input type="text" id="address-input" placeholder="Digite o endereço ou nome do local em Sorocaba..." autocomplete="off" />
             <div id="suggestions-list" class="suggestions-list hidden"></div>
           </div>
+          
+          <div class="cnae-input-wrapper">
+            <input type="text" id="cnae-input" placeholder="CNAE (opcional)" autocomplete="off" />
+          </div>
+
           <button id="search-btn" class="btn-search" onclick="buscarEndereco()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             Consultar
@@ -61,9 +66,16 @@
         <p><strong>Zonamento Código:</strong> <span id="res-zona-codigo" class="zone-code-tag"></span></p>
         <p><strong>Descrição da Zona (Lei 13.123/2025):</strong> <span id="res-zona"></span></p>
         
-        <!-- Bloco Minimalista de Usos Permitidos -->
+        <!-- Bloco de Categorias de Uso Gerais Permitidas -->
         <p style="margin-top: 10px;"><strong>Categorias de Uso Permitidas (Art. 118):</strong></p>
         <div id="res-usos-permitidos" class="uses-container"></div>
+
+        <!-- NOVO: Bloco de Resultado do CNAE (Injetado dinamicamente se preenchido) -->
+        <div id="cnae-verdict-box" class="cnae-verdict-box hidden">
+          <p><strong>Cruzamento de Atividade (CNAE):</strong></p>
+          <div id="cnae-badge" class="cnae-badge"></div>
+          <p id="cnae-justificativa" class="cnae-justificativa-text"></p>
+        </div>
 
         <p style="margin-top: 10px;"><strong>Justificativa Legal:</strong></p>
         <p id="res-justificativa" class="justificativa-text"></p>
