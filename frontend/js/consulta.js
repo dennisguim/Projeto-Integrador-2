@@ -14,7 +14,7 @@ const DESCRICOES_USO = {
   GRD: "Gerador de Ruído Diurno (Oficinas mecânicas, serralherias, indústrias barulhentas)",
   TL: "Turismo e Lazer (Hotéis-fazenda, clubes de campo, parques temáticos)",
   UAI: "Uso de Alta Incomodidade (Depósito de GLP/gás, postos de combustíveis, indústrias químicas)",
-  UE: "Uso Especial (Reservatórios, cemitérios, museus, escolas, hospitais, órgãos públicos)",
+  UE: "Uso Especial (escolas, hospitais, cemitérios, infraestrutura, órgãos públicos)",
   AAP: "Atividades Agropastoris (Cultivos agrícolas, criação de animais, agronegócio e feiras de produtores)"
 };
 
@@ -38,6 +38,31 @@ const MAPEAMENTO_USOS = {
   CCR: ["CSI", "SEAP", "EVC", "PGTP", "PGTI", "GRD", "GRN", "TL", "UE"],
   ZRURAL: ["CSI", "EVC", "PGTI", "PGTP", "TL", "UAI", "UE", "AAP"],
   AEIP: ["CSI", "SEAP", "EVC", "UE"]
+};
+
+// Banco de dados local de CNAEs frequentes em Sorocaba para correspondência exata
+const BANCO_CNAE = {
+  "4781400": { desc: "Comércio varejista de artigos do vestuário e acessórios (Lojas de Roupas)", cat: "CSI" },
+  "4711302": { desc: "Comércio varejista de mercadorias em geral (Supermercados)", cat: "PGTI" },
+  "5611201": { desc: "Restaurantes e similares", cat: "CSI" },
+  "5611203": { desc: "Lanchonetes, casas de chá, de sucos e similares", cat: "CSI" },
+  "4721102": { desc: "Padaria e confeitaria com predominância de revenda", cat: "CSI" },
+  "4771701": { desc: "Comércio varejista de produtos farmacêuticos (Farmácias)", cat: "CSI" },
+  "4930202": { desc: "Transporte rodoviário de carga (Transportadoras)", cat: "PGTP" },
+  "8630503": { desc: "Atividade médica ambulatorial restrita a consultas (Clínicas Médicas)", cat: "SEAP" },
+  "8513900": { desc: "Ensino de idiomas", cat: "SEAP" },
+  "9602501": { desc: "Serviços de cabeleireiros, manicure, pedicure (Salões de Beleza)", cat: "SEAP" },
+  "7020400": { desc: "Atividades de consultoria em gestão empresarial (Escritórios)", cat: "SEAP" },
+  "6201500": { desc: "Desenvolvimento de programas de computador sob encomenda", cat: "EVC" },
+  "4744099": { desc: "Comércio varejista de materiais de construção em geral (Materiais Grosseiros)", cat: "PGTP" },
+  "4784900": { desc: "Comércio varejista de gás liquefeito de petróleo (Depósito de Gás GLP)", cat: "UAI" },
+  "4731800": { desc: "Comércio varejista de combustíveis para veículos automotores (Postos)", cat: "UAI" },
+  "0811900": { desc: "Extração de areia, cascalho ou pedregulho (Mineração)", cat: "UAI" },
+  "0111301": { desc: "Cultivo de arroz", cat: "AAP" },
+  "0151201": { desc: "Criação de bovinos para corte", cat: "AAP" },
+  "9102301": { desc: "Atividades de museus e de conservação de lugares históricos", cat: "UE" },
+  "8520100": { desc: "Ensino médio (Escolas Estaduais/Particulares)", cat: "UE" },
+  "8610101": { desc: "Atividades de atendimento hospitalar (Hospitais)", cat: "UE" }
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -209,11 +234,58 @@ async function validarPonto(lat, lng, logradouro) {
   }
 }
 
+// Analisa o CNAE inserido e retorna a categoria correspondente e a descrição
+function analisarAtividadeCNAE(cnaeString) {
+  const clean = cnaeString.replace(/[^0-9]/g, "");
+  if (!clean) return null;
+
+  // 1. Tenta correspondência exata no banco de dados local
+  if (BANCO_CNAE[clean]) {
+    return BANCO_CNAE[clean];
+  }
+
+  // 2. Fallback inteligente usando os 2 primeiros dígitos (Divisão CNAE)
+  const div = parseInt(clean.substring(0, 2));
+  if (isNaN(div)) return null;
+
+  if (div >= 1 && div <= 3) {
+    return { desc: "Atividades Agropastoris/Pesca (CNAE Geral)", cat: "AAP" };
+  } else if (div >= 5 && div <= 9) {
+    return { desc: "Extração Mineral e Serviços Correlatos (CNAE Geral)", cat: "UAI" };
+  } else if (div >= 10 && div <= 33) {
+    return { desc: "Atividade Industrial / Fabricação (CNAE Geral)", cat: "CSI" };
+  } else if (div === 45 || div === 47) {
+    // Tratamento diferenciado para hipermercados
+    if (clean.startsWith("47113")) {
+      return { desc: "Comércio de Grande Porte (Hipermercados / Mercados grandes)", cat: "PGTI" };
+    }
+    return { desc: "Atividade de Comércio Varejista/Atacadista (CNAE Geral)", cat: "CSI" };
+  } else if (div >= 49 && div <= 53) {
+    return { desc: "Serviços de Transporte, Logística e Armazenagem (CNAE Geral)", cat: "PGTP" };
+  } else if (div === 56) {
+    return { desc: "Alimentação (Restaurantes, bares, pensões, trailers)", cat: "CSI" };
+  } else if (div === 62 || div === 63) {
+    return { desc: "Tecnologia da Informação e Processamento de Dados (CNAE Geral)", cat: "EVC" };
+  } else if ((div >= 69 && div <= 74) || div === 77 || div === 78 || (div >= 80 && div <= 82)) {
+    return { desc: "Serviços Profissionais, de Escritório e Apoio Administrativo (CNAE Geral)", cat: "SEAP" };
+  } else if (div === 85) {
+    return { desc: "Educação / Cursos / Ensino (CNAE Geral)", cat: "UE" };
+  } else if (div === 86) {
+    return { desc: "Serviços de Saúde Humana / Consultórios (CNAE Geral)", cat: "SEAP" };
+  } else if (div === 96) {
+    return { desc: "Outras Atividades de Serviços Pessoais (Salões, estéticas, lavanderias)", cat: "SEAP" };
+  }
+
+  return { desc: "Atividade Comercial/Serviço Geral (Não listado)", cat: "CSI" };
+}
+
 function exibirResultado(data) {
   const resultCard = document.getElementById("result-card");
   const badge = document.getElementById("parecer-badge");
   const reqList = document.getElementById("res-requisitos");
   const usesContainer = document.getElementById("res-usos-permitidos");
+  const cnaeInput = document.getElementById("cnae-input");
+  const cnaeVerdictBox = document.getElementById("cnae-verdict-box");
 
   resultCard.classList.remove("hidden");
   document.getElementById("res-tipo").textContent = data.tipo || (tipoComercioSelecionado === "ambulante" ? "Comércio Ambulante" : "Comércio Fixo");
@@ -248,12 +320,11 @@ function exibirResultado(data) {
   document.getElementById("res-justificativa").textContent = data.justificativa;
 
   // Injeta as tags de usos permitidos de forma minimalista
+  const normalizedKey = zonaCodigo.toUpperCase().replace("-E", "EXP");
+  const usosPermitidos = MAPEAMENTO_USOS[normalizedKey] || ["CSI", "SEAP", "EVC", "UE"];
+
   if (usesContainer) {
     usesContainer.innerHTML = "";
-    // Recupera a lista de categorias de uso da zona (código sanitizado em uppercase)
-    const normalizedKey = zonaCodigo.toUpperCase().replace("-E", "EXP");
-    const usosPermitidos = MAPEAMENTO_USOS[normalizedKey] || ["CSI", "SEAP", "EVC", "UE"];
-
     usosPermitidos.forEach(uso => {
       const span = document.createElement("span");
       span.className = "use-tag";
@@ -261,6 +332,55 @@ function exibirResultado(data) {
       span.title = DESCRICOES_USO[uso] || "Uso Urbano";
       usesContainer.appendChild(span);
     });
+  }
+
+  // --- CRUZAMENTO DINÂMICO DE CNAE COM O ZONEAMENTO ---
+  if (cnaeInput && cnaeInput.value.trim() && cnaeVerdictBox) {
+    const cnaeValue = cnaeInput.value.trim();
+    const atividade = analisarAtividadeCNAE(cnaeValue);
+
+    if (atividade) {
+      cnaeVerdictBox.classList.remove("hidden");
+      const cnaeBadge = document.getElementById("cnae-badge");
+      const cnaeJustificativa = document.getElementById("cnae-justificativa");
+
+      // Verifica se a categoria da atividade está permitida na zona atual
+      const cnaePermitidoNaZona = usosPermitidos.includes(atividade.cat);
+
+      // Estiliza de acordo com a viabilidade do zoneamento x CNAE
+      cnaeBadge.className = "cnae-badge";
+      if (cnaePermitidoNaZona) {
+        if (data.parecer === "Necessita de Vistoria") {
+          // Atividade permitida, mas o lote exige vistoria local de recuo/largura
+          cnaeBadge.classList.add("cnae-badge-vistoria");
+          cnaeBadge.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-alert-triangle"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            Vistoria Necessária
+          `;
+          cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE enquadrado em <strong>${atividade.cat}</strong>) é compatível com o zoneamento <strong>${zonaCodigo}</strong>, porém o local exige vistoria física prévia de calçada/recuo.`;
+        } else {
+          // Totalmente Apto
+          cnaeBadge.classList.add("cnae-badge-apto");
+          cnaeBadge.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            Atividade Permitida
+          `;
+          cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE enquadrado em <strong>${atividade.cat}</strong>) é <strong>totalmente compatível</strong> com o zoneamento <strong>${zonaCodigo}</strong> de acordo com a Seção II, Art. 118 da Lei 13.123/2025.`;
+        }
+      } else {
+        // Atividade Vedada na Zona
+        cnaeBadge.classList.add("cnae-badge-inapto");
+        cnaeBadge.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+          Atividade Proibida
+        `;
+        cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE classificado em <strong>${atividade.cat}</strong>) é <strong>VEDADA</strong> para este zoneamento. O zoneamento <strong>${zonaCodigo}</strong> não aceita a categoria <strong>${atividade.cat}</strong>.`;
+      }
+    } else {
+      cnaeVerdictBox.classList.add("hidden");
+    }
+  } else {
+    if (cnaeVerdictBox) cnaeVerdictBox.classList.add("hidden");
   }
 
   // Preenche a lista de requisitos municipais
