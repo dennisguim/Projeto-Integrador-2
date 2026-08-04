@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SEMEPP Sorocaba - Consulta de Comércio Ambulante</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- CSS Principal -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Cabeçalho -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-icon">S</div>
+      <div class="brand-text">
+        <h1>SEMEPP Sorocaba</h1>
+        <p>Desenvolvimento Econômico & Turismo</p>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <div class="sync-badge" title="Servidor conectado em tempo real">
+        <span class="sync-dot"></span>
+        <span id="sync-status-text">Online</span>
+      </div>
+      <button class="btn-icon" id="theme-toggle" title="Alternar Tema Claro/Escuro">
+        🌙
+      </button>
+    </div>
+  </header>
+
+  <!-- Conteúdo Principal / Portal Hub -->
+  <main class="main-container">
+    <section class="hero">
+      <h2>Plataforma de Comércio Ambulante</h2>
+      <p>Análise de viabilidade urbanística em tempo real de acordo com o Novo Plano Diretor (Lei nº 13.123/2025).</p>
+    </section>
+
+    <div class="hub-grid">
+      <!-- Card 1: Consulta (Destaque) -->
+      <a href="consulta.html" class="hub-card card-primary">
+        <div class="card-icon">🔍</div>
+        <h3 class="card-title">Consultar Ponto Comercial</h3>
+        <p class="card-desc">Verifique na hora se o endereço desejado é apto para comércio ambulante antes de dar entrada no pedido.</p>
+      </a>
+
+      <!-- Card 2: Carteira Digital -->
+      <a href="#" class="hub-card" onclick="alert('Módulo de Carteira Digital será configurado no Passo 4!')">
+        <div class="card-icon">🪪</div>
+        <h3 class="card-title">Minha Autorização Digital</h3>
+        <p class="card-desc">Acesse sua carteira digital de permissionário com QR Code válido para fiscalização em campo.</p>
+      </a>
+
+      <!-- Card 3: Manual e Diretrizes -->
+      <a href="#" class="hub-card" onclick="alert('Regras: Equipamento max 2,00m x 2,00m e faixa livre na calçada.')">
+        <div class="card-icon">📋</div>
+        <h3 class="card-title">Manual do Ambulante</h3>
+        <p class="card-desc">Consulte as dimensões máximas de equipamentos, recuos de calçada e documentação necessária.</p>
+      </a>
+
+      <!-- Card 4: Área do Servidor -->
+      <a href="#" class="hub-card" onclick="alert('Área de Servidores e Fiscais será liberada nas próximas fases!')">
+        <div class="card-icon">🛡️</div>
+        <h3 class="card-title">Área do Servidor / Fiscal</h3>
+        <p class="card-desc">Login restrito para fiscais da prefeitura realizarem vistorias e leitura de QR Code.</p>
+      </a>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p>© 2026 Prefeitura Municipal de Sorocaba - Lei Municipal nº 13.123/2025</p>
+  </footer>
+
+  <!-- Script JavaScript -->
+  <script src="js/app.js"></script>
+</body>
+</html>
