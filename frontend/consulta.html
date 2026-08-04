@@ -32,7 +32,7 @@
         </div>
 
         <div class="search-box">
-          <input type="text" id="address-input" placeholder="Digite o endereço ou nome do local..." />
+          <input type="text" id="address-input" placeholder="Digite o endereço ou nome do local em Sorocaba..." />
           <button id="search-btn" onclick="buscarEndereco()">🔍 Consultar</button>
         </div>
       </div>
@@ -46,10 +46,15 @@
       <div id="result-card" class="glass-card hidden">
         <h3>Parecer de Viabilidade</h3>
         <div id="parecer-badge" class="badge"></div>
-        <p><strong>Modalidade:</strong> <span id="res-tipo"></span></p>
-        <p><strong>Zona Encontrada:</strong> <span id="res-zona"></span></p>
+        <p style="margin-top: 10px;"><strong>Modalidade:</strong> <span id="res-tipo"></span></p>
+        <p><strong>Zoneamento (Lei 13.123/2025):</strong> <span id="res-zona"></span></p>
         <p><strong>Justificativa Legal:</strong></p>
         <p id="res-justificativa" class="justificativa-text"></p>
+        
+        <div id="req-container" style="margin-top: 12px; text-align: left;">
+          <strong style="font-size: 0.9rem; color: var(--primary-color);">📋 Condições e Requisitos Municipais:</strong>
+          <ul id="res-requisitos" style="margin-top: 6px; padding-left: 20px; font-size: 0.85rem; line-height: 1.4;"></ul>
+        </div>
       </div>
     </main>
   </div>

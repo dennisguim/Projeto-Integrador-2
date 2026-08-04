@@ -87,12 +87,24 @@ async function validarPonto(lat, lng, logradouro) {
 function exibirResultado(data) {
   const resultCard = document.getElementById("result-card");
   const badge = document.getElementById("parecer-badge");
+  const reqList = document.getElementById("res-requisitos");
 
   resultCard.classList.remove("hidden");
   document.getElementById("res-tipo").textContent = data.tipo || (tipoComercioSelecionado === "ambulante" ? "Comércio Ambulante" : "Comércio Fixo");
   document.getElementById("res-zona").textContent = data.zona;
   document.getElementById("res-justificativa").textContent = data.justificativa;
 
+  // Preenche a lista de requisitos municipais trazidos da legislação
+  reqList.innerHTML = "";
+  if (data.requisitos_legais && data.requisitos_legais.length > 0) {
+    data.requisitos_legais.forEach(req => {
+      const li = document.createElement("li");
+      li.textContent = req;
+      reqList.appendChild(li);
+    });
+  }
+
+  // Estiliza o Badge do Parecer
   badge.className = "badge";
   if (data.parecer === "Apto") {
     badge.classList.add("badge-apto");

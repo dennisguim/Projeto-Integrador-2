@@ -61,9 +61,9 @@ def read_root():
 
 @app.get("/status")
 def status_check():
-    return {"status": "ok", "versao": "1.1.0", "poligonos_carregados": len(camada_zoneamento)}
+    return {"status": "ok", "versao": "1.2.0", "poligonos_carregados": len(camada_zoneamento)}
 
-# Endpoint de Viabilidade Espacial Point-in-Polygon (Lei 13.123/2025)
+# Endpoint de Viabilidade Espacial Cruzando Plano Diretor + Leis Municipais de Comércio
 @app.post("/api/viabilidade")
 def avaliar_viabilidade(req: ConsultaRequest):
     ponto = Point(req.longitude, req.latitude)
@@ -75,7 +75,7 @@ def avaliar_viabilidade(req: ConsultaRequest):
             zona_encontrada = item["propriedades"].get("name") or item["propriedades"].get("ZONA") or "Zona Mista"
             break
 
-    # Fallback genérico caso o ponto esteja na divisa ou fora da camada GeoJSON
+    # Fallback genérico caso o ponto esteja fora do GeoJSON
     if not zona_encontrada:
         if -23.4800 <= req.latitude <= -23.4700:
             zona_encontrada = "ZR1 - Zona Residencial 1"
@@ -89,28 +89,45 @@ def avaliar_viabilidade(req: ConsultaRequest):
                 "zona": zona_encontrada,
                 "parecer": "Inapto",
                 "tipo": "Comércio Ambulante",
-                "justificativa": "Conforme o Art. 120 da Lei Municipal 13.123/2025, zonas estritamente residenciais proíbem a instalação de comércio ambulante."
+                "justificativa": "Art. 120 da Lei 13.123/2025 (Plano Diretor): Proibida atividade ambulante em Zonas Estritamente Residenciais (ZR1/ZER).",
+                "requisitos_legais": [
+                    "Atividade Vedada em Zona Residencial ZR1",
+                    "Sem permissão para emissão de licença SEMEPP"
+                ]
             }
         elif "ZCA" in zona_encontrada or "Ambiental" in zona_encontrada:
             return {
                 "zona": zona_encontrada,
                 "parecer": "Inapto",
                 "tipo": "Comércio Ambulante",
-                "justificativa": "Área de Preservação Ambiental. Proibida a instalação de equipamentos comerciais em calçadas ou vias públicas."
+                "justificativa": "Área de Preservação e Conservação Ambiental. Proibida a instalação de equipamentos comerciais em logradouros públicos.",
+                "requisitos_legais": [
+                    "Proteção Ambiental Municipal",
+                    "Proibido equipamento temporário ou fixo"
+                ]
             }
         elif "ZC" in zona_encontrada or "Central" in zona_encontrada or "CCS" in zona_encontrada:
             return {
                 "zona": zona_encontrada,
                 "parecer": "Apto",
                 "tipo": "Comércio Ambulante",
-                "justificativa": "Zona Comercial permissível. Equipamento limitado a 2,00m x 2,00m e manutenção da faixa livre para pedestres."
+                "justificativa": "Zona Comercial / Corredor de Serviços permissível para ambulantes cadastrados.",
+                "requisitos_legais": [
+                    "Equipamento limitado às dimensões máximas de 2,00m x 2,00m",
+                    "Manutenção de no mínimo 2,00m de faixa livre para pedestres na calçada",
+                    "Cadastro ativo na SEMEPP e exibição de QR Code de Autorização Digital"
+                ]
             }
         else:
             return {
                 "zona": zona_encontrada,
                 "parecer": "Necessita de Vistoria",
                 "tipo": "Comércio Ambulante",
-                "justificativa": "Zona mista ou corredor comercial. Requer vistoria da fiscalização para medição da largura da calçada (mínimo 2 metros livres)."
+                "justificativa": "Zona residencial predominantemente mista. Requer medição presencial da calçada por fiscal da SEMEPP.",
+                "requisitos_legais": [
+                    "Vistoria presencial obrigatória",
+                    "Verificação de não interferência em garagens, pontos de ônibus e esquinas"
+                ]
             }
 
     # --- REGRAS PARA COMÉRCIO FIXO ---
@@ -120,28 +137,46 @@ def avaliar_viabilidade(req: ConsultaRequest):
                 "zona": zona_encontrada,
                 "parecer": "Inapto",
                 "tipo": "Comércio Fixo",
-                "justificativa": "Zona Estritamente Residencial (ZER/ZR1). Não é permitido o licenciamento de estabelecimentos comerciais ou prestação de serviços abertos ao público."
+                "justificativa": "Lei 13.123/2025: Zonas Estritamente Residenciais proíbem a abertura de estabelecimentos comerciais ou prestação de serviços abertos ao público.",
+                "requisitos_legais": [
+                    "Zoneamento estritamente residencial (ZER/ZR1)",
+                    "Vedado licenciamento de alvará comercial"
+                ]
             }
         elif "ZCA" in zona_encontrada or "Ambiental" in zona_encontrada:
             return {
                 "zona": zona_encontrada,
                 "parecer": "Inapto",
                 "tipo": "Comércio Fixo",
-                "justificativa": "Zona de Conservação Ambiental. Proibida a edificação ou instalação de estabelecimentos comerciais."
+                "justificativa": "Zona de Conservação Ambiental. Proibida a edificação ou instalação de comércio fixo.",
+                "requisitos_legais": [
+                    "Área de conservação ambiental",
+                    "Vedada emissão de habite-se comercial"
+                ]
             }
         elif "ZC" in zona_encontrada or "CCS" in zona_encontrada or "ZR-C" in zona_encontrada:
             return {
                 "zona": zona_encontrada,
                 "parecer": "Apto",
                 "tipo": "Comércio Fixo",
-                "justificativa": "Zona Comercial / Corredor de Serviços. Uso comercial totalmente permitido. Sujeito à emissão de Alvará de Funcionamento, Habite-se e AVCB."
+                "justificativa": "Zona Comercial / Corredor de Serviços. Instalação comercial permitida pelo Plano Diretor.",
+                "requisitos_legais": [
+                    "Alvará de Funcionamento visível na entrada principal (Lei 11.367/2016)",
+                    "Uso de Calçada para Mesas/Cadeiras (Bares/Restaurantes): Requer faixa livre mínima de 1,20m marcada com tinta amarela (Lei Municipal 13.217/2025)",
+                    "Funcionamento após 23h00 exige Alvará Especial Noturno (Lei Municipal 10.052/2012)",
+                    "Atividades de baixo risco possuem dispensa nos termos da Liberdade Econômica (Lei 12.346/2021)"
+                ]
             }
         else:
             return {
                 "zona": zona_encontrada,
                 "parecer": "Necessita de Vistoria",
                 "tipo": "Comércio Fixo",
-                "justificativa": "Zona residencial predominantemente mista. Permite comércio local/bairro, sujeito a análise de incomodidade (ruído, tráfego, vagas de estacionamento) pela Secretaria de Planejamento."
+                "justificativa": "Zona mista ou de requalificação. Permite comércio local/bairro após análise de incomodidade.",
+                "requisitos_legais": [
+                    "Análise de Ruído e Incomodidade (Lei 8.345/2007 e NBR-10151)",
+                    "Vistoria de Habite-se, Acessibilidade e Vagas de Estacionamento"
+                ]
             }
 
 @app.get("/api/carteira/{cpf_ou_protocolo}")
