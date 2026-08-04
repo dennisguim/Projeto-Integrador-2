@@ -11,7 +11,7 @@ from shapely.geometry import shape, Point
 
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="API Sistema Ambulante - SEMEPP Sorocaba")
+app = FastAPI(title="API Sistema de Viabilidade Comercial - SEMEPP / Sorocaba")
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,6 +42,7 @@ class ConsultaRequest(BaseModel):
     latitude: float
     longitude: float
     logradouro: str
+    tipo_comercio: str = "ambulante"  # "ambulante" ou "fixo"
 
 class ValidarQRRequest(BaseModel):
     token: str
@@ -60,7 +61,7 @@ def read_root():
 
 @app.get("/status")
 def status_check():
-    return {"status": "ok", "versao": "1.0.0", "poligonos_carregados": len(camada_zoneamento)}
+    return {"status": "ok", "versao": "1.1.0", "poligonos_carregados": len(camada_zoneamento)}
 
 # Endpoint de Viabilidade Espacial Point-in-Polygon (Lei 13.123/2025)
 @app.post("/api/viabilidade")
@@ -74,38 +75,74 @@ def avaliar_viabilidade(req: ConsultaRequest):
             zona_encontrada = item["propriedades"].get("name") or item["propriedades"].get("ZONA") or "Zona Mista"
             break
 
-    # Regras de Negócio por Zona
+    # Fallback genérico caso o ponto esteja na divisa ou fora da camada GeoJSON
     if not zona_encontrada:
-        # Fallback genérico caso o ponto esteja na divisa ou fora da camada
         if -23.4800 <= req.latitude <= -23.4700:
             zona_encontrada = "ZR1 - Zona Residencial 1"
         else:
             zona_encontrada = "ZC - Zona Central"
 
-    if "ZR1" in zona_encontrada or "Residencial 1" in zona_encontrada:
-        return {
-            "zona": zona_encontrada,
-            "parecer": "Inapto",
-            "justificativa": "Conforme o Art. 120 da Lei Municipal 13.123/2025, zonas estritamente residenciais ZR1 proíbem a instalação de comércio ambulante."
-        }
-    elif "ZCA" in zona_encontrada or "Ambiental" in zona_encontrada:
-        return {
-            "zona": zona_encontrada,
-            "parecer": "Inapto",
-            "justificativa": "Área de Preservação Ambiental. Proibida a instalação de equipamentos comerciais."
-        }
-    elif "ZC" in zona_encontrada or "Central" in zona_encontrada or "CCS" in zona_encontrada:
-        return {
-            "zona": zona_encontrada,
-            "parecer": "Apto",
-            "justificativa": "Zona Comercial permissível. Equipamento limitado a 2,00m x 2,00m e manutenção da faixa livre para pedestres."
-        }
+    # --- REGRAS PARA COMÉRCIO AMBULANTE ---
+    if req.tipo_comercio == "ambulante":
+        if "ZR1" in zona_encontrada or "Residencial 1" in zona_encontrada or "ZER" in zona_encontrada:
+            return {
+                "zona": zona_encontrada,
+                "parecer": "Inapto",
+                "tipo": "Comércio Ambulante",
+                "justificativa": "Conforme o Art. 120 da Lei Municipal 13.123/2025, zonas estritamente residenciais proíbem a instalação de comércio ambulante."
+            }
+        elif "ZCA" in zona_encontrada or "Ambiental" in zona_encontrada:
+            return {
+                "zona": zona_encontrada,
+                "parecer": "Inapto",
+                "tipo": "Comércio Ambulante",
+                "justificativa": "Área de Preservação Ambiental. Proibida a instalação de equipamentos comerciais em calçadas ou vias públicas."
+            }
+        elif "ZC" in zona_encontrada or "Central" in zona_encontrada or "CCS" in zona_encontrada:
+            return {
+                "zona": zona_encontrada,
+                "parecer": "Apto",
+                "tipo": "Comércio Ambulante",
+                "justificativa": "Zona Comercial permissível. Equipamento limitado a 2,00m x 2,00m e manutenção da faixa livre para pedestres."
+            }
+        else:
+            return {
+                "zona": zona_encontrada,
+                "parecer": "Necessita de Vistoria",
+                "tipo": "Comércio Ambulante",
+                "justificativa": "Zona mista ou corredor comercial. Requer vistoria da fiscalização para medição da largura da calçada (mínimo 2 metros livres)."
+            }
+
+    # --- REGRAS PARA COMÉRCIO FIXO ---
     else:
-        return {
-            "zona": zona_encontrada,
-            "parecer": "Necessita de Vistoria",
-            "justificativa": "Zona mista ou corredor comercial. Requer vistoria da fiscalização para medição da largura da calçada."
-        }
+        if "ZR1" in zona_encontrada or "Residencial 1" in zona_encontrada or "ZER" in zona_encontrada:
+            return {
+                "zona": zona_encontrada,
+                "parecer": "Inapto",
+                "tipo": "Comércio Fixo",
+                "justificativa": "Zona Estritamente Residencial (ZER/ZR1). Não é permitido o licenciamento de estabelecimentos comerciais ou prestação de serviços abertos ao público."
+            }
+        elif "ZCA" in zona_encontrada or "Ambiental" in zona_encontrada:
+            return {
+                "zona": zona_encontrada,
+                "parecer": "Inapto",
+                "tipo": "Comércio Fixo",
+                "justificativa": "Zona de Conservação Ambiental. Proibida a edificação ou instalação de estabelecimentos comerciais."
+            }
+        elif "ZC" in zona_encontrada or "CCS" in zona_encontrada or "ZR-C" in zona_encontrada:
+            return {
+                "zona": zona_encontrada,
+                "parecer": "Apto",
+                "tipo": "Comércio Fixo",
+                "justificativa": "Zona Comercial / Corredor de Serviços. Uso comercial totalmente permitido. Sujeito à emissão de Alvará de Funcionamento, Habite-se e AVCB."
+            }
+        else:
+            return {
+                "zona": zona_encontrada,
+                "parecer": "Necessita de Vistoria",
+                "tipo": "Comércio Fixo",
+                "justificativa": "Zona residencial predominantemente mista. Permite comércio local/bairro, sujeito a análise de incomodidade (ruído, tráfego, vagas de estacionamento) pela Secretaria de Planejamento."
+            }
 
 @app.get("/api/carteira/{cpf_ou_protocolo}")
 def obter_carteira_digital(cpf_ou_protocolo: str):
