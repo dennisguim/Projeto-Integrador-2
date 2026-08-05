@@ -84,7 +84,10 @@ const BANCO_CNAE = {
   "8520100": { desc: "Ensino médio (Escolas Estaduais/Particulares)", cat: "UE" },
   "8610101": { desc: "Atividades de atendimento hospitalar (Hospitais)", cat: "UE" },
 
-  // Logística & Alta Incomodidade (PGTP / UAI)
+  // Logística & Alta Incomodidade (PGTP / UAI / CSI)
+  "4921301": { desc: "Transporte rodoviário coletivo de passageiros, com itinerário fixo, municipal (Linhas de Ônibus / Passageiros)", cat: "CSI" },
+  "4923001": { desc: "Serviço de táxi", cat: "CSI" },
+  "4923002": { desc: "Serviço de transporte de passageiros - locação de automóveis com motorista (Aplicativos / Uber)", cat: "CSI" },
   "4930202": { desc: "Transporte rodoviário de carga (Transportadoras / Depósitos)", cat: "PGTP" },
   "4744099": { desc: "Comércio varejista de materiais de construção em geral (Depósito de Materiais)", cat: "PGTP" },
   "4784900": { desc: "Comércio varejista de gás liquefeito de petróleo (Depósito de Gás GLP)", cat: "UAI" },
@@ -274,7 +277,11 @@ async function analisarAtividadeCNAE(cnaeString) {
   let desc = "";
   let cat = "";
 
-  // 1. Tenta correspondência exata no banco de dados local (desempenho instantâneo)
+  // 1. Tenta correspondência exata na base completa do Decreto 30.529/2025 (1.334 CNAEs)
+  if (typeof BANCO_DECRETO_30529 !== "undefined" && BANCO_DECRETO_30529[clean]) {
+    return BANCO_DECRETO_30529[clean];
+  }
+
   if (BANCO_CNAE[clean]) {
     return BANCO_CNAE[clean];
   }
@@ -325,8 +332,13 @@ async function analisarAtividadeCNAE(cnaeString) {
       if (!desc) desc = "Comércio Varejista / Atacadista (CNAE Geral)";
     }
   } else if (div >= 49 && div <= 53) {
-    cat = "PGTP";
-    if (!desc) desc = "Transportadoras / Logística e Armazenagem (CNAE Geral)";
+    if (clean.startsWith("492")) {
+      cat = "CSI";
+      if (!desc) desc = "Transporte Rodoviário Coletivo ou Individual de Passageiros (CSI)";
+    } else {
+      cat = "PGTP";
+      if (!desc) desc = "Transporte de Cargas / Logística e Armazenagem (PGTP)";
+    }
   } else if (div === 56) {
     cat = "CSI";
     if (!desc) desc = "Alimentação (Restaurante / Lanchonete / Serviços Alimentares)";
