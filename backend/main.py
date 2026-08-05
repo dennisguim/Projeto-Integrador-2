@@ -86,30 +86,30 @@ def avaliar_viabilidade(req: ConsultaRequest):
 
     # --- REGRAS PARA COMÉRCIO AMBULANTE ---
     if req.tipo_comercio == "ambulante":
-        # Inapto: ZR1 (Estritamente Residencial) ou ZCA (Conservação Ambiental)
-        if any(z in zona_encontrada for z in ["ZR1", "ZER", "ZCA", "Ambiental"]):
-            if "ZCA" in zona_encontrada or "Ambiental" in zona_encontrada:
-                return {
-                    "zona": zona_encontrada,
-                    "parecer": "Inapto",
-                    "tipo": "Comércio Ambulante",
-                    "justificativa": f"Zona de Conservação Ambiental ({zona_encontrada}). Proibida a instalação de equipamentos comerciais em logradouros públicos.",
-                    "requisitos_legais": [
-                        "Proteção Ambiental Municipal",
-                        "Proibido equipamento temporário ou fixo"
-                    ]
-                }
-            else:
-                return {
-                    "zona": zona_encontrada,
-                    "parecer": "Inapto",
-                    "tipo": "Comércio Ambulante",
-                    "justificativa": f"Art. 120 da Lei 13.123/2025 (Plano Diretor): Proibida atividade ambulante em Zonas Estritamente Residenciais ({zona_encontrada}).",
-                    "requisitos_legais": [
-                        "Atividade Vedada em Zona Residencial ZR1/ZER",
-                        "Sem permissão para emissão de licença SEMEPP"
-                    ]
-                }
+        # Inapto: ZCA (Conservação Ambiental para ambulantes de rua em geral)
+        if any(z in zona_encontrada for z in ["ZCA", "Ambiental"]):
+            return {
+                "zona": zona_encontrada,
+                "parecer": "Inapto",
+                "tipo": "Comércio Ambulante",
+                "justificativa": f"Zona de Conservação Ambiental ({zona_encontrada}). Proibida a instalação de equipamentos comerciais informais em vias públicas de preservação.",
+                "requisitos_legais": [
+                    "Proteção Ambiental Municipal (Lei 13.123/2025)",
+                    "Vedada ocupação de área verde protegida"
+                ]
+            }
+        # ZR1: Ambulantes tradicionais são restritos, mas permite análise de enquadramento
+        elif any(z in zona_encontrada for z in ["ZR1", "ZER"]):
+            return {
+                "zona": zona_encontrada,
+                "parecer": "Necessita de Vistoria",
+                "tipo": "Comércio Ambulante",
+                "justificativa": f"Zona Residencial 1 ({zona_encontrada}). Pp. permissível apenas para Atividades de Apoio, Prestação de Serviços sem incômodo ou Eventos Especiais (Art. 118: SEAP, EVC, UE).",
+                "requisitos_legais": [
+                    "Verificação de não incômodo ao sossego público",
+                    "Análise especial da SEMEPP para ponto fixo/ambulante"
+                ]
+            }
         # Apto: ZC, ZAE, ZI1, ZI2, ZPI e Corredores de Comércio
         elif any(z in zona_encontrada for z in ["ZC", "Central", "ZAE", "ZI1", "ZI2", "ZPI", "CCS", "CCI", "CCR"]):
             return {
@@ -138,42 +138,42 @@ def avaliar_viabilidade(req: ConsultaRequest):
 
     # --- REGRAS PARA COMÉRCIO FIXO ---
     else:
-        # Inapto: ZR1 (Estritamente Residencial) ou ZCA (Conservação Ambiental)
-        if any(z in zona_encontrada for z in ["ZR1", "ZER", "ZCA", "Ambiental"]):
-            if "ZCA" in zona_encontrada or "Ambiental" in zona_encontrada:
-                return {
-                    "zona": zona_encontrada,
-                    "parecer": "Inapto",
-                    "tipo": "Comércio Fixo",
-                    "justificativa": f"Zona de Conservação Ambiental ({zona_encontrada}). Proibida a edificação ou instalação de comércio fixo.",
-                    "requisitos_legais": [
-                        "Área de conservação ambiental",
-                        "Vedada emissão de habite-se comercial"
-                    ]
-                }
-            else:
-                return {
-                    "zona": zona_encontrada,
-                    "parecer": "Inapto",
-                    "tipo": "Comércio Fixo",
-                    "justificativa": f"Lei 13.123/2025: Zonas Estritamente Residenciais ({zona_encontrada}) proíbem a abertura de estabelecimentos comerciais ou prestação de serviços abertos ao público.",
-                    "requisitos_legais": [
-                        "Zoneamento estritamente residencial (ZER/ZR1)",
-                        "Vedado licenciamento de alvará comercial"
-                    ]
-                }
         # Apto: ZC, ZAE, ZI1, ZI2, ZPI e Corredores de Comércio/Serviços
-        elif any(z in zona_encontrada for z in ["ZC", "Central", "ZAE", "ZI1", "ZI2", "ZPI", "CCS", "CCI", "CCR", "ZR-C"]):
+        if any(z in zona_encontrada for z in ["ZC", "Central", "ZAE", "ZI1", "ZI2", "ZPI", "CCS", "CCI", "CCR", "ZR-C"]):
             return {
                 "zona": zona_encontrada,
                 "parecer": "Apto",
                 "tipo": "Comércio Fixo",
-                "justificativa": f"Zona Comercial / Industrial ({zona_encontrada}). Instalação comercial de comércio fixo permitida pelo Plano Diretor.",
+                "justificativa": f"Zona Comercial / Industrial ({zona_encontrada}). Instalação comercial de comércio fixo permitida pelo Plano Diretor (Art. 118).",
                 "requisitos_legais": [
                     "Alvará de Funcionamento visível na entrada principal (Lei 11.367/2016)",
                     "Uso de Calçada para Mesas/Cadeiras (Bares/Restaurantes): Requer faixa livre mínima de 1,20m (Lei Municipal 13.217/2025)",
                     "Funcionamento após 23h00 exige Alvará Especial Noturno (Lei Municipal 10.052/2012)",
                     "Atividades de baixo risco possuem dispensa nos termos da Liberdade Econômica (Lei 12.346/2021)"
+                ]
+            }
+        # ZCA: Permite EVC, TL, UE sob vistoria e licenciamento ambiental
+        elif any(z in zona_encontrada for z in ["ZCA", "Ambiental"]):
+            return {
+                "zona": zona_encontrada,
+                "parecer": "Necessita de Vistoria",
+                "tipo": "Comércio Fixo",
+                "justificativa": f"Zona de Conservação Ambiental ({zona_encontrada}). Art. 118 admite EVC (Escritório Virtual), TL (Turismo e Lazer) e UE (Uso Especial), mediante licenciamento ambiental e vistoria prévia.",
+                "requisitos_legais": [
+                    "Licenciamento Ambiental Municipal / SEMA",
+                    "Enquadramento estrito nas categorias EVC, TL ou UE"
+                ]
+            }
+        # ZR1: Permite SEAP, EVC, UE sob vistoria e análise de enquadramento de uso
+        elif any(z in zona_encontrada for z in ["ZR1", "ZER"]):
+            return {
+                "zona": zona_encontrada,
+                "parecer": "Necessita de Vistoria",
+                "tipo": "Comércio Fixo",
+                "justificativa": f"Zona Residencial 1 ({zona_encontrada}). O Art. 118 admite SEAP (Serviços/Apoio), EVC (Escritórios Virtuais) e UE (Uso Especial). Comércios varejistas de alto impacto são vedados.",
+                "requisitos_legais": [
+                    "Análise de enquadramento da atividade (CNAE em SEAP, EVC ou UE)",
+                    "Ausência de incomodidade sonora ou de tráfego de carga"
                 ]
             }
         # Necessita de Vistoria: ZR2, ZR3, ZR3exp, ZRDS, ZCH, ZRURAL, AEIP, etc.
@@ -182,7 +182,7 @@ def avaliar_viabilidade(req: ConsultaRequest):
                 "zona": zona_encontrada,
                 "parecer": "Necessita de Vistoria",
                 "tipo": "Comércio Fixo",
-                "justificativa": f"Zona mista ou de requalificação ({zona_encontrada}). Permite comércio local/bairro após análise de incomodidade.",
+                "justificativa": f"Zona mista ou de requalificação ({zona_encontrada}). Permite comércio local/bairro após análise de enquadramento de uso (Art. 118).",
                 "requisitos_legais": [
                     "Análise de Ruído e Incomodidade (Lei 8.345/2007 e NBR-10151)",
                     "Vistoria de Habite-se, Acessibilidade e Vagas de Estacionamento"

@@ -5,8 +5,12 @@ let debounceTimeout;
 
 // Dicionário de descrições completas dos usos (exibidos no tooltip/hover)
 const DESCRICOES_USO = {
+  RU: "Residencial Unifamiliar (casas térreas/sobrados isolados)",
+  RM: "Residencial Multifamiliar (apartamentos e condomínio de casas)",
+  RT: "Residencial Transitório (hotéis, pousadas, pensões)",
+  RSI: "Residencial com Serviço Integrado (trabalho em casa / home office com atendimento restrito)",
   CSI: "Comércio, Serviços e Indústria de Pequeno Porte (padarias, farmácias, mercados locais, lojas)",
-  SEAP: "Serviço e Atividade de Apoio (escritórios administrativos, clínicas médicas, odontológicas, salões de beleza)",
+  SEAP: "Serviço e Atividade de Apoio (escritórios administrativos, clínicas médicas, salões de beleza)",
   EVC: "Escritório Virtual e de Contato (Coworkings e sedes fiscais sem movimentação de estoque)",
   PGTI: "Polo Gerador de Tráfego de Veículos (Supermercados, shoppings, agências bancárias, grandes academias)",
   PGTP: "Polo Gerador de Tráfego Pesado (Transportadoras, depósitos de materiais pesados, frotas de caminhões)",
@@ -18,56 +22,79 @@ const DESCRICOES_USO = {
   AAP: "Atividades Agropastoris (Cultivos agrícolas, criação de animais, agronegócio e feiras de produtores)"
 };
 
-// Matriz de permissão do Art. 118 do Plano Diretor de Sorocaba
+// Matriz de permissão do Art. 118 (Quadro 01) do Plano Diretor de Sorocaba (Lei 13.123/2025)
 const MAPEAMENTO_USOS = {
-  ZC: ["CSI", "SEAP", "EVC", "PGTI", "GRN", "GRD", "TL", "UE"],
-  ZPI: ["CSI", "SEAP", "EVC", "PGTI", "GRN", "GRD", "TL", "UE"],
-  ZR1: ["SEAP", "EVC", "UE"],
-  ZR2: ["CSI", "SEAP", "EVC", "TL", "UE"],
-  ZR3: ["CSI", "SEAP", "EVC", "TL", "UE"],
-  ZR3EXP: ["CSI", "SEAP", "EVC", "TL", "UE"],
-  ZRDS: ["SEAP", "EVC", "UE"],
-  ZI1: ["CSI", "EVC", "PGTP", "PGTI", "GRN", "GRD", "UAI", "UE"],
-  ZI2: ["CSI", "EVC", "PGTP", "PGTI", "GRN", "GRD", "UE"],
-  ZAE: ["CSI", "SEAP", "EVC", "PGTP", "PGTI", "GRN", "GRD", "UE"],
-  ZCH: ["EVC", "TL", "UE"],
-  ZCA: ["EVC", "TL", "UE"],
-  CCS1: ["CSI", "SEAP", "EVC", "TL", "UE"],
-  CCS2: ["CSI", "SEAP", "EVC", "PGTI", "GRN", "GRD", "TL", "UE"],
-  CCI: ["CSI", "SEAP", "EVC", "PGTP", "PGTI", "GRN", "GRD", "UE"],
-  CCR: ["CSI", "SEAP", "EVC", "PGTP", "PGTI", "GRD", "GRN", "TL", "UE"],
-  ZRURAL: ["CSI", "EVC", "PGTI", "PGTP", "TL", "UAI", "UE", "AAP"],
+  ZC: ["RU", "RM", "RT", "RSI", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "TL", "UE"],
+  ZPI: ["RU", "RM", "RT", "RSI", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "TL", "UE"],
+  ZR1: ["RU", "RT", "RSI", "SEAP", "EVC", "UE"],
+  ZR2: ["RU", "RM", "RT", "RSI", "CSI", "SEAP", "EVC", "TL", "UE"],
+  ZR3: ["RU", "RM", "RT", "RSI", "CSI", "SEAP", "EVC", "TL", "UE"],
+  ZR3EXP: ["RU", "RM", "RT", "RSI", "CSI", "SEAP", "EVC", "TL", "UE"],
+  "ZR3-E": ["RU", "RM", "RT", "RSI", "CSI", "SEAP", "EVC", "TL", "UE"],
+  ZRDS: ["RU", "RT", "RSI", "SEAP", "EVC", "UE"],
+  ZI1: ["PGTP", "PGTI", "GRN", "GRD", "CSI", "EVC", "UAI", "UE"],
+  ZI2: ["PGTP", "PGTI", "GRN", "GRD", "CSI", "EVC", "UE"],
+  ZAE: ["PGTP", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "UE"],
+  ZCH: ["RU", "RT", "RSI", "EVC", "TL", "UE"],
+  ZCA: ["RU", "RT", "RSI", "EVC", "TL", "UE"],
+  CCS1: ["RU", "RM", "RT", "RSI", "CSI", "SEAP", "EVC", "TL", "UE"],
+  CCS2: ["RU", "RM", "RT", "RSI", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "TL", "UE"],
+  CCI: ["PGTP", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "UE"],
+  CCR: ["RU", "RM", "RT", "RSI", "PGTP", "PGTI", "GRD", "GRN", "CSI", "SEAP", "EVC", "TL", "UE"],
+  ZRURAL: ["RU", "EVC", "PGTI", "PGTP", "CSI", "TL", "UAI", "UE", "AAP"],
   AEIP: ["CSI", "SEAP", "EVC", "UE"]
 };
 
-// Banco de dados local de CNAEs frequentes em Sorocaba para correspondência rápida/offline
+// Banco de dados local de CNAEs frequentes em Sorocaba (Decreto 30.529/2025) para correspondência rápida/offline
 const BANCO_CNAE = {
+  // Comércio Varejista (CSI / PGTI)
   "4781400": { desc: "Comércio varejista de artigos do vestuário e acessórios (Lojas de Roupas)", cat: "CSI" },
   "4711302": { desc: "Comércio varejista de mercadorias em geral (Supermercados)", cat: "PGTI" },
+  "4721102": { desc: "Padaria e confeitaria com predominância de revenda", cat: "CSI" },
+  "4722901": { desc: "Comércio varejista de carnes (Açougues)", cat: "CSI" },
+  "4771701": { desc: "Comércio varejista de produtos farmacêuticos (Farmácias)", cat: "CSI" },
+  "4789004": { desc: "Comércio varejista de animais vivos e de artigos para pet shop", cat: "CSI" },
+  "4753900": { desc: "Comércio varejista especializado de eletrodomésticos e equipamentos de áudio e vídeo", cat: "CSI" },
+
+  // Alimentação & Bares (CSI / GRN)
   "5611201": { desc: "Restaurantes e similares (Alimentação Silenciosa)", cat: "CSI" },
   "5611203": { desc: "Lanchonetes, casas de chá, de sucos e similares", cat: "CSI" },
-  "5611205": { desc: "Bares e outros estabelecimentos de bebidas com ou sem entretenimento/música ao vivo", cat: "GRN" },
+  "5611204": { desc: "Bares e outros estabelecimentos especializados em servir bebidas, sem entretenimento", cat: "CSI" },
+  "5611205": { desc: "Bares e outros estabelecimentos de bebidas com entretenimento/música (Ruído Noturno)", cat: "GRN" },
   "9001902": { desc: "Produção musical e casas de espetáculos com música ao vivo (Shows)", cat: "GRN" },
-  "9329899": { desc: "Outras atividades de recreação, entretenimento e lazer (Casas noturnas / Jogos)", cat: "GRN" },
-  "9321800": { desc: "Parques de diversão e parques temáticos (Recreação ao ar livre)", cat: "TL" },
-  "9313100": { desc: "Academias de ginástica e centros esportivos (Ruído Diurno)", cat: "GRD" },
-  "4721102": { desc: "Padaria e confeitaria com predominância de revenda", cat: "CSI" },
-  "4771701": { desc: "Comércio varejista de produtos farmacêuticos (Farmácias)", cat: "CSI" },
-  "4930202": { desc: "Transporte rodoviário de carga (Transportadoras)", cat: "PGTP" },
-  "8630503": { desc: "Atividade médica ambulatorial restrita a consultas (Clínicas Médicas)", cat: "SEAP" },
-  "8513900": { desc: "Ensino de idiomas", cat: "SEAP" },
+
+  // Serviços e Apoio (SEAP / EVC)
   "9602501": { desc: "Serviços de cabeleireiros, manicure, pedicure (Salões de Beleza)", cat: "SEAP" },
+  "9602502": { desc: "Atividades de estética, barbearias e serviços de beleza", cat: "SEAP" },
+  "8630503": { desc: "Atividade médica ambulatorial restrita a consultas (Clínicas Médicas)", cat: "SEAP" },
+  "8630504": { desc: "Atividade odontológica (Clínicas Odontológicas)", cat: "SEAP" },
+  "6911701": { desc: "Serviços advocatícios (Escritórios de Advocacia)", cat: "SEAP" },
+  "6920601": { desc: "Atividades de contabilidade (Escritórios de Contabilidade)", cat: "SEAP" },
   "7020400": { desc: "Atividades de consultoria em gestão empresarial (Escritórios)", cat: "SEAP" },
-  "6201500": { desc: "Desenvolvimento de programas de computador sob encomenda", cat: "EVC" },
-  "4744099": { desc: "Comércio varejista de materiais de construção em geral (Materiais Grosseiros)", cat: "PGTP" },
-  "4784900": { desc: "Comércio varejista de gás liquefeito de petróleo (Depósito de Gás GLP)", cat: "UAI" },
-  "4731800": { desc: "Comércio varejista de combustíveis para veículos automotores (Postos)", cat: "UAI" },
-  "0811900": { desc: "Extração de areia, cascalho ou pedregulho (Mineração)", cat: "UAI" },
-  "0111301": { desc: "Cultivo de arroz", cat: "AAP" },
-  "0151201": { desc: "Criação de bovinos para corte", cat: "AAP" },
-  "9102301": { desc: "Atividades de museus e de conservação de lugares históricos", cat: "UE" },
+  "6201500": { desc: "Desenvolvimento de programas de computador sob encomenda (TI / Coworking)", cat: "EVC" },
+
+  // Ruído Diurno (GRD)
+  "4520001": { desc: "Serviços de manutenção e reparação mecânica de veículos automotores (Oficinas)", cat: "GRD" },
+  "4520002": { desc: "Serviços de lanternagem ou funilaria e pintura de veículos automotores", cat: "GRD" },
+  "9313100": { desc: "Academias de ginástica e centros esportivos (Ruído Diurno)", cat: "GRD" },
+
+  // Educação & Saúde (UE / SEAP)
+  "8511200": { desc: "Educação infantil - creche (Creches e Berçários)", cat: "UE" },
+  "8513900": { desc: "Ensino de idiomas e cursos livres", cat: "SEAP" },
   "8520100": { desc: "Ensino médio (Escolas Estaduais/Particulares)", cat: "UE" },
-  "8610101": { desc: "Atividades de atendimento hospitalar (Hospitais)", cat: "UE" }
+  "8610101": { desc: "Atividades de atendimento hospitalar (Hospitais)", cat: "UE" },
+
+  // Logística & Alta Incomodidade (PGTP / UAI)
+  "4930202": { desc: "Transporte rodoviário de carga (Transportadoras / Depósitos)", cat: "PGTP" },
+  "4744099": { desc: "Comércio varejista de materiais de construção em geral (Depósito de Materiais)", cat: "PGTP" },
+  "4784900": { desc: "Comércio varejista de gás liquefeito de petróleo (Depósito de Gás GLP)", cat: "UAI" },
+  "4731800": { desc: "Comércio varejista de combustíveis para veículos automotores (Postos de Gasolina)", cat: "UAI" },
+
+  // Turismo, Lazer & Agro (TL / AAP)
+  "5510801": { desc: "Hotéis e pousadas (Hospedagem e Lazer)", cat: "TL" },
+  "9321800": { desc: "Parques de diversão e parques temáticos (Recreação ao ar livre)", cat: "TL" },
+  "0111301": { desc: "Cultivo de arroz (Atividade Agrícola)", cat: "AAP" },
+  "0151201": { desc: "Criação de bovinos para corte (Atividade Pecuária)", cat: "AAP" }
 };
 
 document.addEventListener("DOMContentLoaded", () => {
