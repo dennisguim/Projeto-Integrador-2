@@ -457,7 +457,15 @@ async function exibirResultado(data) {
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
             Atividade Permitida
           `;
-          cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE enquadrado em <strong>${atividade.cat}</strong>) é <strong>totalmente compatível</strong> com o zoneamento <strong>${zonaCodigo}</strong> de acordo com a Seção II, Art. 118 da Lei 13.123/2025.`;
+          cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE enquadrado em <strong>${atividade.cat}</strong>) é <strong>totalmente compatível</strong> com o zoneamento <strong>${zonaCodigo}</strong> no horário diurno regular.`;
+        }
+
+        // Condicionantes do Decreto 30.529/2025
+        if (atividade.cat_noturno && !usosPermitidos.includes(atividade.cat_noturno)) {
+          cnaeJustificativa.innerHTML += `<div style="margin-top:8px; padding:6px 10px; background:rgba(239, 68, 68, 0.1); border-left:3px solid var(--status-inapto); border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🌙 Alerta Noturno (Decreto 30.529/2025):</strong> Se o estabelecimento operar entre <strong>22h e 06h</strong>, o enquadramento passa para <strong>${atividade.cat_noturno}</strong> e a atividade torna-se <strong>VEDADA</strong> no zoneamento ${zonaCodigo}.</div>`;
+        }
+        if (atividade.cat_porte && !usosPermitidos.includes(atividade.cat_porte)) {
+          cnaeJustificativa.innerHTML += `<div style="margin-top:6px; padding:6px 10px; background:rgba(245, 158, 11, 0.1); border-left:3px solid var(--status-vistoria); border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🏢 Alerta de Porte (Decreto 30.529/2025):</strong> Se a área construída for maior que <strong>2.500m²</strong> ou abrigar frota de veículos, o enquadramento passa para <strong>${atividade.cat_porte}</strong>.</div>`;
         }
       } else {
         cnaeBadge.classList.add("cnae-badge-inapto");
@@ -465,7 +473,7 @@ async function exibirResultado(data) {
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
           Atividade Proibida
         `;
-        cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE classificado em <strong>${atividade.cat}</strong>) é <strong>VEDADA</strong> para este zoneamento. A zona <strong>${zonaCodigo}</strong> não admite a categoria <strong>${atividade.cat}</strong> (excesso de ruído noturno ou impacto urbano incompatível).`;
+        cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE classificado em <strong>${atividade.cat}</strong>) é <strong>VEDADA</strong> para este zoneamento. A zona <strong>${zonaCodigo}</strong> não admite a categoria <strong>${atividade.cat}</strong> de acordo com a Seção II, Art. 118 da Lei 13.123/2025 e Decreto 30.529/2025.`;
       }
     } else {
       cnaeVerdictBox.classList.add("hidden");
