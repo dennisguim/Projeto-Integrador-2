@@ -147,7 +147,101 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+  // --- AUTOCOMPLETE DE CNAE POR CÓDIGO E POR NOME DA ATIVIDADE ---
+  const cnaeInput = document.getElementById("cnae-input");
+  const cnaeSuggestionsList = document.getElementById("cnae-suggestions-list");
+  let debounceCnaeTimeout;
+
+  if (cnaeInput && cnaeSuggestionsList) {
+    cnaeInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        cnaeSuggestionsList.classList.add("hidden");
+        if (window.ultimoPontoConsultado) {
+          validarPonto(window.ultimoPontoConsultado.lat, window.ultimoPontoConsultado.lng, window.ultimoPontoConsultado.logradouro);
+        }
+      }
+    });
+
+    cnaeInput.addEventListener("input", () => {
+      clearTimeout(debounceCnaeTimeout);
+      const query = cnaeInput.value.trim();
+
+      if (query.length < 2) {
+        cnaeSuggestionsList.innerHTML = "";
+        cnaeSuggestionsList.classList.add("hidden");
+        return;
+      }
+
+      debounceCnaeTimeout = setTimeout(() => {
+        carregarSugestoesCNAE(query);
+      }, 250);
+    });
+
+    document.addEventListener("click", (e) => {
+      if (e.target !== cnaeInput && e.target !== cnaeSuggestionsList && !cnaeSuggestionsList.contains(e.target)) {
+        cnaeSuggestionsList.classList.add("hidden");
+      }
+    });
+  }
 });
+
+function carregarSugestoesCNAE(query) {
+  const cnaeSuggestionsList = document.getElementById("cnae-suggestions-list");
+  const cnaeInput = document.getElementById("cnae-input");
+  if (!cnaeSuggestionsList || typeof BANCO_DECRETO_30529 === "undefined") return;
+
+  const normalize = (str) =>
+    str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
+
+  const qClean = normalize(query);
+  const qCleanNum = query.replace(/[^0-9]/g, "");
+
+  const matches = [];
+  for (const key in BANCO_DECRETO_30529) {
+    const item = BANCO_DECRETO_30529[key];
+    const fmtMatch = item.fmt && normalize(item.fmt).includes(qClean);
+    const keyMatch = qCleanNum && key.includes(qCleanNum);
+    const descMatch = item.desc && normalize(item.desc).includes(qClean);
+
+    if (fmtMatch || keyMatch || descMatch) {
+      matches.push(item);
+    }
+    if (matches.length >= 15) break;
+  }
+
+  if (matches.length === 0) {
+    cnaeSuggestionsList.innerHTML = `<div class="suggestion-item" style="font-size:0.83rem; color:var(--text-muted); cursor:default;">Nenhum CNAE ou atividade encontrada para "${query}"</div>`;
+    cnaeSuggestionsList.classList.remove("hidden");
+    return;
+  }
+
+  cnaeSuggestionsList.innerHTML = "";
+  matches.forEach((item) => {
+    const div = document.createElement("div");
+    div.className = "suggestion-item";
+    div.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+        <strong style="font-size:0.85rem; color:var(--primary-gold);">${item.fmt}</strong>
+        <span style="font-size:0.75rem; padding:2px 6px; background:rgba(255,255,255,0.1); border-radius:4px; color:var(--text-muted); font-weight:600;">${item.cat || 'CSI'}</span>
+      </div>
+      <div style="font-size:0.8rem; color:var(--text-main); margin-top:2px; line-height:1.2;">${item.desc}</div>
+    `;
+
+    div.addEventListener("click", () => {
+      cnaeInput.value = item.fmt;
+      cnaeSuggestionsList.classList.add("hidden");
+      if (window.ultimoPontoConsultado) {
+        validarPonto(window.ultimoPontoConsultado.lat, window.ultimoPontoConsultado.lng, window.ultimoPontoConsultado.logradouro);
+      }
+    });
+
+    cnaeSuggestionsList.appendChild(div);
+  });
+
+  cnaeSuggestionsList.classList.remove("hidden");
+}
 
 async function carregarSugestoes(query) {
   const suggestionsList = document.getElementById("suggestions-list");
@@ -243,6 +337,8 @@ async function buscarEndereco() {
 }
 
 async function validarPonto(lat, lng, logradouro) {
+  window.ultimoPontoConsultado = { lat, lng, logradouro };
+
   if (marker) {
     map.removeLayer(marker);
   }

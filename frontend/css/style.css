@@ -420,23 +420,24 @@ body {
   border-color: var(--primary-gold);
 }
 
-/* Campo e Alinhamento do CNAE */
+/* Campo e Alinhamento do CNAE com Autocomplete por Nome */
 .cnae-input-wrapper {
-  max-width: 185px;
+  position: relative;
+  max-width: 270px;
   width: 100%;
 }
 
 .cnae-input-wrapper input {
   width: 100%;
-  padding: 0.85rem 1.2rem;
+  padding: 0.85rem 1rem;
   border-radius: 12px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
   color: var(--text-main);
-  font-size: 1rem;
+  font-size: 0.92rem;
   backdrop-filter: blur(10px);
   outline: none;
-  text-align: center;
+  text-align: left;
   transition: border-color var(--transition-fast);
 }
 
