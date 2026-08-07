@@ -110,8 +110,33 @@ document.addEventListener("DOMContentLoaded", () => {
     attribution: '© OpenStreetMap contributors | Prefeitura de Sorocaba'
   }).addTo(map);
 
-  map.on("click", (e) => {
-    validarPonto(e.latlng.lat, e.latlng.lng, "Ponto selecionado via mapa");
+  map.on("click", async (e) => {
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+
+    let logradouro = "Ponto selecionado via mapa";
+    try {
+      const url = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`;
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const geoData = await resp.json();
+        if (geoData && geoData.features && geoData.features.length > 0) {
+          const p = geoData.features[0].properties;
+          const streetName = p.name || p.street;
+          const number = p.housenumber ? `, ${p.housenumber}` : "";
+          const district = p.district || p.suburb ? ` - ${p.district || p.suburb}` : "";
+          if (streetName) {
+            logradouro = `${streetName}${number}${district}, Sorocaba - SP`;
+            const addrInput = document.getElementById("address-input");
+            if (addrInput) addrInput.value = logradouro;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Geocodificação reversa indisponível no momento.");
+    }
+
+    validarPonto(lat, lng, logradouro);
   });
 
   const addressInput = document.getElementById("address-input");
@@ -138,7 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       debounceTimeout = setTimeout(() => {
         carregarSugestoes(query);
-      }, 400);
+      }, 180);
     });
 
     document.addEventListener("click", (e) => {
@@ -147,53 +172,228 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+  // --- AUTOCOMPLETE DE CNAE POR CÓDIGO E POR NOME DA ATIVIDADE ---
+  const cnaeInput = document.getElementById("cnae-input");
+  const cnaeSuggestionsList = document.getElementById("cnae-suggestions-list");
+  let debounceCnaeTimeout;
+
+  if (cnaeInput && cnaeSuggestionsList) {
+    cnaeInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        cnaeSuggestionsList.classList.add("hidden");
+        if (window.ultimoPontoConsultado) {
+          validarPonto(window.ultimoPontoConsultado.lat, window.ultimoPontoConsultado.lng, window.ultimoPontoConsultado.logradouro);
+        }
+      }
+    });
+
+    cnaeInput.addEventListener("input", () => {
+      clearTimeout(debounceCnaeTimeout);
+      const query = cnaeInput.value.trim();
+
+      if (query.length < 2) {
+        cnaeSuggestionsList.innerHTML = "";
+        cnaeSuggestionsList.classList.add("hidden");
+        return;
+      }
+
+      debounceCnaeTimeout = setTimeout(() => {
+        carregarSugestoesCNAE(query);
+      }, 250);
+    });
+
+    document.addEventListener("click", (e) => {
+      if (e.target !== cnaeInput && e.target !== cnaeSuggestionsList && !cnaeSuggestionsList.contains(e.target)) {
+        cnaeSuggestionsList.classList.add("hidden");
+      }
+    });
+  }
 });
+
+function carregarSugestoesCNAE(query) {
+  const cnaeSuggestionsList = document.getElementById("cnae-suggestions-list");
+  const cnaeInput = document.getElementById("cnae-input");
+  if (!cnaeSuggestionsList || typeof BANCO_DECRETO_30529 === "undefined") return;
+
+  const normalize = (str) =>
+    str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
+
+  const qClean = normalize(query);
+  const qCleanNum = query.replace(/[^0-9]/g, "");
+
+  const matches = [];
+  for (const key in BANCO_DECRETO_30529) {
+    const item = BANCO_DECRETO_30529[key];
+    const fmtMatch = item.fmt && normalize(item.fmt).includes(qClean);
+    const keyMatch = qCleanNum && key.includes(qCleanNum);
+    const descMatch = item.desc && normalize(item.desc).includes(qClean);
+
+    if (fmtMatch || keyMatch || descMatch) {
+      matches.push(item);
+    }
+    if (matches.length >= 15) break;
+  }
+
+  if (matches.length === 0) {
+    cnaeSuggestionsList.innerHTML = `<div class="suggestion-item" style="font-size:0.83rem; color:var(--text-muted); cursor:default;">Nenhum CNAE ou atividade encontrada para "${query}"</div>`;
+    cnaeSuggestionsList.classList.remove("hidden");
+    return;
+  }
+
+  cnaeSuggestionsList.innerHTML = "";
+  matches.forEach((item) => {
+    const div = document.createElement("div");
+    div.className = "suggestion-item";
+    div.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+        <strong style="font-size:0.85rem; color:var(--primary-gold);">${item.fmt}</strong>
+        <span style="font-size:0.75rem; padding:2px 6px; background:rgba(255,255,255,0.1); border-radius:4px; color:var(--text-muted); font-weight:600;">${item.cat || 'CSI'}</span>
+      </div>
+      <div style="font-size:0.8rem; color:var(--text-main); margin-top:2px; line-height:1.2;">${item.desc}</div>
+    `;
+
+    div.addEventListener("click", () => {
+      cnaeInput.value = item.fmt;
+      cnaeSuggestionsList.classList.add("hidden");
+      if (window.ultimoPontoConsultado) {
+        validarPonto(window.ultimoPontoConsultado.lat, window.ultimoPontoConsultado.lng, window.ultimoPontoConsultado.logradouro);
+      }
+    });
+
+    cnaeSuggestionsList.appendChild(div);
+  });
+
+  cnaeSuggestionsList.classList.remove("hidden");
+}
+
+// Algoritmo de distância de Levenshtein para tolerância a erros de digitação (Fuzzy Search)
+function levenshteinDistance(a, b) {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+function normalizeAddressStr(str) {
+  return str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
+}
 
 async function carregarSugestoes(query) {
   const suggestionsList = document.getElementById("suggestions-list");
   if (!suggestionsList) return;
 
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(query + ", Sorocaba, SP")}`;
+  const qClean = normalizeAddressStr(query);
+  const results = [];
 
-  try {
-    const response = await fetch(url, {
-      headers: { "Accept-Language": "pt-BR" }
-    });
-    if (!response.ok) return;
+  // 1. Busca Local Fuzzy Instantânea (0ms) no banco de Sorocaba (LOCAIS_SOROCABA)
+  if (typeof LOCAIS_SOROCABA !== "undefined") {
+    LOCAIS_SOROCABA.forEach(item => {
+      const nameNorm = normalizeAddressStr(item.nome);
+      const bairroNorm = normalizeAddressStr(item.bairro);
+      const aliasNorm = (item.aliases || []).map(a => normalizeAddressStr(a));
 
-    const data = await response.json();
-    suggestionsList.innerHTML = "";
+      let matched = nameNorm.includes(qClean) || bairroNorm.includes(qClean) || aliasNorm.some(a => a.includes(qClean));
 
-    if (data && data.length > 0) {
-      data.forEach(item => {
-        const div = document.createElement("div");
-        div.className = "suggestion-item";
+      if (!matched && qClean.length >= 3) {
+        const qWords = qClean.split(/\s+/).filter(w => w.length >= 3);
+        const targetWords = (nameNorm + " " + bairroNorm + " " + aliasNorm.join(" ")).split(/\s+/);
         
-        const parts = item.display_name.split(",");
-        const mainTitle = parts[0].trim();
-        const details = parts.slice(1).map(p => p.trim()).filter(p => !p.includes("Brasil") && !p.includes("Estado de São Paulo") && !p.includes("Região Metropolitana")).join(", ");
+        matched = qWords.every(qw => 
+          targetWords.some(tw => tw.includes(qw) || levenshteinDistance(tw, qw) <= (qw.length > 5 ? 2 : 1))
+        );
+      }
 
-        div.innerHTML = `<strong>${mainTitle}</strong><span>${details}</span>`;
-        
-        div.addEventListener("click", () => {
-          document.getElementById("address-input").value = item.display_name;
-          suggestionsList.classList.add("hidden");
-          
-          const lat = parseFloat(item.lat);
-          const lon = parseFloat(item.lon);
-          map.setView([lat, lon], 17);
-          validarPonto(lat, lon, item.display_name);
+      if (matched) {
+        results.push({
+          display_name: `${item.nome}, ${item.bairro}, Sorocaba - SP`,
+          title: item.nome,
+          details: `${item.bairro}, Sorocaba - SP`,
+          lat: item.lat,
+          lon: item.lng
         });
+      }
+    });
+  }
 
-        suggestionsList.appendChild(div);
-      });
-      suggestionsList.classList.remove("hidden");
-    } else {
-      suggestionsList.classList.add("hidden");
+  // Renderiza sugestões locais imediatamente (0ms de atraso visual)
+  renderizarSugestoesEnderecos(results.slice(0, 6));
+
+  // 2. Busca remota em paralelo via Photon API (Fuzzy OSM geocoder super rápido e sem bloqueio 403)
+  try {
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query + " Sorocaba")}&lat=-23.5015&lon=-47.4581&limit=5`;
+    const response = await fetch(url);
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.features) {
+        data.features.forEach(feat => {
+          const p = feat.properties;
+          if (p.city === "Sorocaba" || p.county === "Sorocaba" || p.state === "São Paulo" || !p.city) {
+            const title = p.name || p.street || query;
+            const details = [p.street, p.suburb, p.district, "Sorocaba - SP"].filter(Boolean).join(", ");
+            const coords = feat.geometry.coordinates; // [lon, lat]
+            
+            if (!results.some(r => Math.abs(r.lat - coords[1]) < 0.001 && Math.abs(r.lon - coords[0]) < 0.001)) {
+              results.push({
+                display_name: `${title}, ${details}`,
+                title: title,
+                details: details,
+                lat: coords[1],
+                lon: coords[0]
+              });
+            }
+          }
+        });
+        renderizarSugestoesEnderecos(results.slice(0, 6));
+      }
     }
   } catch (error) {
-    console.error("Erro ao obter sugestões de busca:", error);
+    console.warn("Consulta Photon externa ocupada. Exibindo resultados locais.", error);
   }
+}
+
+function renderizarSugestoesEnderecos(items) {
+  const suggestionsList = document.getElementById("suggestions-list");
+  if (!suggestionsList) return;
+
+  if (items.length === 0) {
+    suggestionsList.classList.add("hidden");
+    return;
+  }
+
+  suggestionsList.innerHTML = "";
+  items.forEach(item => {
+    const div = document.createElement("div");
+    div.className = "suggestion-item";
+    div.innerHTML = `<strong>${item.title}</strong><span>${item.details}</span>`;
+    
+    div.addEventListener("click", () => {
+      document.getElementById("address-input").value = item.display_name;
+      suggestionsList.classList.add("hidden");
+      
+      map.setView([item.lat, item.lon], 17);
+      validarPonto(item.lat, item.lon, item.display_name);
+    });
+
+    suggestionsList.appendChild(div);
+  });
+  suggestionsList.classList.remove("hidden");
 }
 
 function setTipoComercio(tipo) {
@@ -243,11 +443,14 @@ async function buscarEndereco() {
 }
 
 async function validarPonto(lat, lng, logradouro) {
+  window.ultimoPontoConsultado = { lat, lng, logradouro };
+
   if (marker) {
     map.removeLayer(marker);
   }
 
   marker = L.marker([lat, lng]).addTo(map);
+  marker.bindPopup(`<div style="font-size:0.85rem;"><strong>📍 Ponto Selecionado</strong><br>${logradouro}</div>`).openPopup();
 
   try {
     const response = await fetch("http://localhost:8000/api/viabilidade", {
@@ -460,12 +663,41 @@ async function exibirResultado(data) {
           cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE enquadrado em <strong>${atividade.cat}</strong>) é <strong>totalmente compatível</strong> com o zoneamento <strong>${zonaCodigo}</strong> no horário diurno regular.`;
         }
 
-        // Condicionantes do Decreto 30.529/2025
-        if (atividade.cat_noturno && !usosPermitidos.includes(atividade.cat_noturno)) {
-          cnaeJustificativa.innerHTML += `<div style="margin-top:8px; padding:6px 10px; background:rgba(239, 68, 68, 0.1); border-left:3px solid var(--status-inapto); border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🌙 Alerta Noturno (Decreto 30.529/2025):</strong> Se o estabelecimento operar entre <strong>22h e 06h</strong>, o enquadramento passa para <strong>${atividade.cat_noturno}</strong> e a atividade torna-se <strong>VEDADA</strong> no zoneamento ${zonaCodigo}.</div>`;
+        // Condicionantes do Decreto 30.529/2025 (Noturno e Porte / Metragem Excedente)
+        if (atividade.cat_noturno) {
+          const noturnoPermitido = usosPermitidos.includes(atividade.cat_noturno);
+          const noturnoMsg = noturnoPermitido
+            ? `Se o estabelecimento operar entre <strong>22h e 06h</strong>, o enquadramento passa para <strong>${atividade.cat_noturno}</strong> (Gerador de Ruído Noturno).`
+            : `Se o estabelecimento operar entre <strong>22h e 06h</strong>, o enquadramento passa para <strong>${atividade.cat_noturno}</strong> e a atividade torna-se <strong>VEDADA</strong> no zoneamento ${zonaCodigo}.`;
+          const noturnoStyle = noturnoPermitido
+            ? `background:rgba(59, 130, 246, 0.1); border-left:3px solid var(--primary-gold);`
+            : `background:rgba(239, 68, 68, 0.1); border-left:3px solid var(--status-inapto);`;
+          cnaeJustificativa.innerHTML += `<div style="margin-top:8px; padding:6px 10px; ${noturnoStyle} border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🌙 Alerta Noturno (Decreto 30.529/2025):</strong> ${noturnoMsg}</div>`;
         }
-        if (atividade.cat_porte && !usosPermitidos.includes(atividade.cat_porte)) {
-          cnaeJustificativa.innerHTML += `<div style="margin-top:6px; padding:6px 10px; background:rgba(245, 158, 11, 0.1); border-left:3px solid var(--status-vistoria); border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🏢 Alerta de Porte (Decreto 30.529/2025):</strong> Se a área construída for maior que <strong>2.500m²</strong> ou abrigar frota de veículos, o enquadramento passa para <strong>${atividade.cat_porte}</strong>.</div>`;
+
+        if (atividade.cat_porte) {
+          let descMetragem = "Se a área construída/terreno for excedente ou abrigar frota de veículos";
+          if (atividade.conds_detalhe) {
+            const d = atividade.conds_detalhe;
+            const partes = [];
+            if (d.terreno_gt_2500) partes.push("área de terreno > 2.500m²");
+            if (d.constr_gt_2500) partes.push("área construída > 2.500m²");
+            if (d.constr_gt_750) partes.push("área construída > 750m²");
+            if (d.garage_gt_2500) partes.push("área privativa (exceto garagem) > 2.500m²");
+            if (d.garage_gt_2000) partes.push("área privativa (exceto garagem) > 2.000m²");
+            if (d.garage_gt_1000) partes.push("área privativa (exceto garagem) > 1.000m²");
+            if (d.garage_gt_750) partes.push("área privativa (exceto garagem) > 750m²");
+            if (partes.length > 0) descMetragem = "Em caso de " + partes.join(" ou ");
+          }
+
+          const portePermitido = usosPermitidos.includes(atividade.cat_porte);
+          const porteMsg = portePermitido
+            ? `${descMetragem}, o enquadramento passa para <strong>${atividade.cat_porte}</strong> (admitido no zoneamento ${zonaCodigo}).`
+            : `${descMetragem}, o enquadramento passa para <strong>${atividade.cat_porte}</strong> e a atividade torna-se <strong>INCOMPATÍVEL</strong> com o zoneamento ${zonaCodigo}.`;
+          const porteStyle = portePermitido
+            ? `background:rgba(245, 158, 11, 0.1); border-left:3px solid var(--status-vistoria);`
+            : `background:rgba(239, 68, 68, 0.1); border-left:3px solid var(--status-inapto);`;
+          cnaeJustificativa.innerHTML += `<div style="margin-top:6px; padding:6px 10px; ${porteStyle} border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🏢 Alerta de Porte (Decreto 30.529/2025):</strong> ${porteMsg}</div>`;
         }
       } else {
         cnaeBadge.classList.add("cnae-badge-inapto");

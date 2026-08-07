@@ -15,7 +15,12 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
         Voltar
       </a>
-      <h2>Viabilidade Espacial</h2>
+      <div class="header-brand">
+        <div class="header-logo-wrapper">
+          <img src="img/logo-sorocaba.png" alt="Prefeitura de Sorocaba" class="header-logo" />
+        </div>
+        <h2>Viabilidade Espacial</h2>
+      </div>
       <button id="theme-toggle" class="btn-icon"></button>
     </header>
 
@@ -43,7 +48,8 @@
           </div>
           
           <div class="cnae-input-wrapper">
-            <input type="text" id="cnae-input" placeholder="CNAE (opcional)" autocomplete="off" />
+            <input type="text" id="cnae-input" placeholder="CNAE ou Atividade (ex: Bar, Padaria)" autocomplete="off" />
+            <div id="cnae-suggestions-list" class="suggestions-list hidden"></div>
           </div>
 
           <button id="search-btn" class="btn-search" onclick="buscarEndereco()">
@@ -91,9 +97,10 @@
     </main>
   </div>
 
-  <!-- Leaflet JS & Banco Decreto 30.529/2025 -->
+  <!-- Leaflet JS & Bancos Locais (Sorocaba + Decreto 30.529/2025) -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/locais_sorocaba_db.js"></script>
   <script src="js/decreto30529_db.js"></script>
   <script src="js/consulta.js"></script>
 </body>
