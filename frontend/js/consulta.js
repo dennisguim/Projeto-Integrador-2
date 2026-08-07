@@ -110,8 +110,33 @@ document.addEventListener("DOMContentLoaded", () => {
     attribution: '© OpenStreetMap contributors | Prefeitura de Sorocaba'
   }).addTo(map);
 
-  map.on("click", (e) => {
-    validarPonto(e.latlng.lat, e.latlng.lng, "Ponto selecionado via mapa");
+  map.on("click", async (e) => {
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+
+    let logradouro = "Ponto selecionado via mapa";
+    try {
+      const url = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`;
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const geoData = await resp.json();
+        if (geoData && geoData.features && geoData.features.length > 0) {
+          const p = geoData.features[0].properties;
+          const streetName = p.name || p.street;
+          const number = p.housenumber ? `, ${p.housenumber}` : "";
+          const district = p.district || p.suburb ? ` - ${p.district || p.suburb}` : "";
+          if (streetName) {
+            logradouro = `${streetName}${number}${district}, Sorocaba - SP`;
+            const addrInput = document.getElementById("address-input");
+            if (addrInput) addrInput.value = logradouro;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Geocodificação reversa indisponível no momento.");
+    }
+
+    validarPonto(lat, lng, logradouro);
   });
 
   const addressInput = document.getElementById("address-input");
@@ -425,6 +450,7 @@ async function validarPonto(lat, lng, logradouro) {
   }
 
   marker = L.marker([lat, lng]).addTo(map);
+  marker.bindPopup(`<div style="font-size:0.85rem;"><strong>📍 Ponto Selecionado</strong><br>${logradouro}</div>`).openPopup();
 
   try {
     const response = await fetch("http://localhost:8000/api/viabilidade", {
