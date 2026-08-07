@@ -138,7 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       debounceTimeout = setTimeout(() => {
         carregarSugestoes(query);
-      }, 400);
+      }, 180);
     });
 
     document.addEventListener("click", (e) => {
@@ -243,51 +243,132 @@ function carregarSugestoesCNAE(query) {
   cnaeSuggestionsList.classList.remove("hidden");
 }
 
+// Algoritmo de distância de Levenshtein para tolerância a erros de digitação (Fuzzy Search)
+function levenshteinDistance(a, b) {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+function normalizeAddressStr(str) {
+  return str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
+}
+
 async function carregarSugestoes(query) {
   const suggestionsList = document.getElementById("suggestions-list");
   if (!suggestionsList) return;
 
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(query + ", Sorocaba, SP")}`;
+  const qClean = normalizeAddressStr(query);
+  const results = [];
 
-  try {
-    const response = await fetch(url, {
-      headers: { "Accept-Language": "pt-BR" }
-    });
-    if (!response.ok) return;
+  // 1. Busca Local Fuzzy Instantânea (0ms) no banco de Sorocaba (LOCAIS_SOROCABA)
+  if (typeof LOCAIS_SOROCABA !== "undefined") {
+    LOCAIS_SOROCABA.forEach(item => {
+      const nameNorm = normalizeAddressStr(item.nome);
+      const bairroNorm = normalizeAddressStr(item.bairro);
+      const aliasNorm = (item.aliases || []).map(a => normalizeAddressStr(a));
 
-    const data = await response.json();
-    suggestionsList.innerHTML = "";
+      let matched = nameNorm.includes(qClean) || bairroNorm.includes(qClean) || aliasNorm.some(a => a.includes(qClean));
 
-    if (data && data.length > 0) {
-      data.forEach(item => {
-        const div = document.createElement("div");
-        div.className = "suggestion-item";
+      if (!matched && qClean.length >= 3) {
+        const qWords = qClean.split(/\s+/).filter(w => w.length >= 3);
+        const targetWords = (nameNorm + " " + bairroNorm + " " + aliasNorm.join(" ")).split(/\s+/);
         
-        const parts = item.display_name.split(",");
-        const mainTitle = parts[0].trim();
-        const details = parts.slice(1).map(p => p.trim()).filter(p => !p.includes("Brasil") && !p.includes("Estado de São Paulo") && !p.includes("Região Metropolitana")).join(", ");
+        matched = qWords.every(qw => 
+          targetWords.some(tw => tw.includes(qw) || levenshteinDistance(tw, qw) <= (qw.length > 5 ? 2 : 1))
+        );
+      }
 
-        div.innerHTML = `<strong>${mainTitle}</strong><span>${details}</span>`;
-        
-        div.addEventListener("click", () => {
-          document.getElementById("address-input").value = item.display_name;
-          suggestionsList.classList.add("hidden");
-          
-          const lat = parseFloat(item.lat);
-          const lon = parseFloat(item.lon);
-          map.setView([lat, lon], 17);
-          validarPonto(lat, lon, item.display_name);
+      if (matched) {
+        results.push({
+          display_name: `${item.nome}, ${item.bairro}, Sorocaba - SP`,
+          title: item.nome,
+          details: `${item.bairro}, Sorocaba - SP`,
+          lat: item.lat,
+          lon: item.lng
         });
+      }
+    });
+  }
 
-        suggestionsList.appendChild(div);
-      });
-      suggestionsList.classList.remove("hidden");
-    } else {
-      suggestionsList.classList.add("hidden");
+  // Renderiza sugestões locais imediatamente (0ms de atraso visual)
+  renderizarSugestoesEnderecos(results.slice(0, 6));
+
+  // 2. Busca remota em paralelo via Photon API (Fuzzy OSM geocoder super rápido e sem bloqueio 403)
+  try {
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query + " Sorocaba")}&lat=-23.5015&lon=-47.4581&limit=5`;
+    const response = await fetch(url);
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.features) {
+        data.features.forEach(feat => {
+          const p = feat.properties;
+          if (p.city === "Sorocaba" || p.county === "Sorocaba" || p.state === "São Paulo" || !p.city) {
+            const title = p.name || p.street || query;
+            const details = [p.street, p.suburb, p.district, "Sorocaba - SP"].filter(Boolean).join(", ");
+            const coords = feat.geometry.coordinates; // [lon, lat]
+            
+            if (!results.some(r => Math.abs(r.lat - coords[1]) < 0.001 && Math.abs(r.lon - coords[0]) < 0.001)) {
+              results.push({
+                display_name: `${title}, ${details}`,
+                title: title,
+                details: details,
+                lat: coords[1],
+                lon: coords[0]
+              });
+            }
+          }
+        });
+        renderizarSugestoesEnderecos(results.slice(0, 6));
+      }
     }
   } catch (error) {
-    console.error("Erro ao obter sugestões de busca:", error);
+    console.warn("Consulta Photon externa ocupada. Exibindo resultados locais.", error);
   }
+}
+
+function renderizarSugestoesEnderecos(items) {
+  const suggestionsList = document.getElementById("suggestions-list");
+  if (!suggestionsList) return;
+
+  if (items.length === 0) {
+    suggestionsList.classList.add("hidden");
+    return;
+  }
+
+  suggestionsList.innerHTML = "";
+  items.forEach(item => {
+    const div = document.createElement("div");
+    div.className = "suggestion-item";
+    div.innerHTML = `<strong>${item.title}</strong><span>${item.details}</span>`;
+    
+    div.addEventListener("click", () => {
+      document.getElementById("address-input").value = item.display_name;
+      suggestionsList.classList.add("hidden");
+      
+      map.setView([item.lat, item.lon], 17);
+      validarPonto(item.lat, item.lon, item.display_name);
+    });
+
+    suggestionsList.appendChild(div);
+  });
+  suggestionsList.classList.remove("hidden");
 }
 
 function setTipoComercio(tipo) {
