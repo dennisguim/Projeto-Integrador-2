@@ -460,12 +460,41 @@ async function exibirResultado(data) {
           cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE enquadrado em <strong>${atividade.cat}</strong>) é <strong>totalmente compatível</strong> com o zoneamento <strong>${zonaCodigo}</strong> no horário diurno regular.`;
         }
 
-        // Condicionantes do Decreto 30.529/2025
-        if (atividade.cat_noturno && !usosPermitidos.includes(atividade.cat_noturno)) {
-          cnaeJustificativa.innerHTML += `<div style="margin-top:8px; padding:6px 10px; background:rgba(239, 68, 68, 0.1); border-left:3px solid var(--status-inapto); border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🌙 Alerta Noturno (Decreto 30.529/2025):</strong> Se o estabelecimento operar entre <strong>22h e 06h</strong>, o enquadramento passa para <strong>${atividade.cat_noturno}</strong> e a atividade torna-se <strong>VEDADA</strong> no zoneamento ${zonaCodigo}.</div>`;
+        // Condicionantes do Decreto 30.529/2025 (Noturno e Porte / Metragem Excedente)
+        if (atividade.cat_noturno) {
+          const noturnoPermitido = usosPermitidos.includes(atividade.cat_noturno);
+          const noturnoMsg = noturnoPermitido
+            ? `Se o estabelecimento operar entre <strong>22h e 06h</strong>, o enquadramento passa para <strong>${atividade.cat_noturno}</strong> (Gerador de Ruído Noturno).`
+            : `Se o estabelecimento operar entre <strong>22h e 06h</strong>, o enquadramento passa para <strong>${atividade.cat_noturno}</strong> e a atividade torna-se <strong>VEDADA</strong> no zoneamento ${zonaCodigo}.`;
+          const noturnoStyle = noturnoPermitido
+            ? `background:rgba(59, 130, 246, 0.1); border-left:3px solid var(--primary-gold);`
+            : `background:rgba(239, 68, 68, 0.1); border-left:3px solid var(--status-inapto);`;
+          cnaeJustificativa.innerHTML += `<div style="margin-top:8px; padding:6px 10px; ${noturnoStyle} border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🌙 Alerta Noturno (Decreto 30.529/2025):</strong> ${noturnoMsg}</div>`;
         }
-        if (atividade.cat_porte && !usosPermitidos.includes(atividade.cat_porte)) {
-          cnaeJustificativa.innerHTML += `<div style="margin-top:6px; padding:6px 10px; background:rgba(245, 158, 11, 0.1); border-left:3px solid var(--status-vistoria); border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🏢 Alerta de Porte (Decreto 30.529/2025):</strong> Se a área construída for maior que <strong>2.500m²</strong> ou abrigar frota de veículos, o enquadramento passa para <strong>${atividade.cat_porte}</strong>.</div>`;
+
+        if (atividade.cat_porte) {
+          let descMetragem = "Se a área construída/terreno for excedente ou abrigar frota de veículos";
+          if (atividade.conds_detalhe) {
+            const d = atividade.conds_detalhe;
+            const partes = [];
+            if (d.terreno_gt_2500) partes.push("área de terreno > 2.500m²");
+            if (d.constr_gt_2500) partes.push("área construída > 2.500m²");
+            if (d.constr_gt_750) partes.push("área construída > 750m²");
+            if (d.garage_gt_2500) partes.push("área privativa (exceto garagem) > 2.500m²");
+            if (d.garage_gt_2000) partes.push("área privativa (exceto garagem) > 2.000m²");
+            if (d.garage_gt_1000) partes.push("área privativa (exceto garagem) > 1.000m²");
+            if (d.garage_gt_750) partes.push("área privativa (exceto garagem) > 750m²");
+            if (partes.length > 0) descMetragem = "Em caso de " + partes.join(" ou ");
+          }
+
+          const portePermitido = usosPermitidos.includes(atividade.cat_porte);
+          const porteMsg = portePermitido
+            ? `${descMetragem}, o enquadramento passa para <strong>${atividade.cat_porte}</strong> (admitido no zoneamento ${zonaCodigo}).`
+            : `${descMetragem}, o enquadramento passa para <strong>${atividade.cat_porte}</strong> e a atividade torna-se <strong>INCOMPATÍVEL</strong> com o zoneamento ${zonaCodigo}.`;
+          const porteStyle = portePermitido
+            ? `background:rgba(245, 158, 11, 0.1); border-left:3px solid var(--status-vistoria);`
+            : `background:rgba(239, 68, 68, 0.1); border-left:3px solid var(--status-inapto);`;
+          cnaeJustificativa.innerHTML += `<div style="margin-top:6px; padding:6px 10px; ${porteStyle} border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🏢 Alerta de Porte (Decreto 30.529/2025):</strong> ${porteMsg}</div>`;
         }
       } else {
         cnaeBadge.classList.add("cnae-badge-inapto");
