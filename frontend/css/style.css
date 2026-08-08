@@ -592,7 +592,7 @@ body {
   background: rgba(255, 255, 255, 0.1);
 }
 
-[data-theme="light"] .suggestion-item:hover {
+.suggestion-item:hover [data-theme="light"] {
   background: rgba(0, 0, 0, 0.05);
 }
 
@@ -799,4 +799,276 @@ svg.lucide {
 
 [data-theme="light"] .justificativa-text {
   background: rgba(0, 0, 0, 0.03);
+}
+
+
+/* ==========================================================================
+   ACESSIVILIDADE - MENUS E ALTO CONTRASTE
+   ========================================================================== */
+
+/* Botão Flutuante de Acessibilidade (Canto Inferior Esquerdo) */
+.accessibility-widget {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  z-index: 99999;
+  font-family: 'Outfit', 'Segoe UI', system-ui, sans-serif;
+}
+
+.acc-main-btn {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary-gold), var(--primary-red));
+  border: 2px solid #ffffff;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.acc-main-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* Menu de Opções de Acessibilidade */
+.acc-menu {
+  position: absolute;
+  bottom: 60px;
+  left: 0;
+  width: 260px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: var(--glass-shadow);
+  display: none;
+  flex-direction: column;
+  gap: 1rem;
+  transform-origin: bottom left;
+  animation: accMenuShow 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.acc-menu.active {
+  display: flex;
+}
+
+@keyframes accMenuShow {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.acc-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.acc-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.acc-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.acc-btn-group {
+  display: flex;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+[data-theme="dark"] .acc-btn-group {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.acc-btn-group button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.acc-btn-group button:hover {
+  background: var(--card-hover);
+  box-shadow: var(--glass-shadow);
+}
+
+.btn-contrast {
+  width: 100%;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-main);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all var(--transition-fast);
+}
+
+.btn-contrast:hover {
+  background: var(--primary-gold);
+  color: #ffffff;
+  border-color: var(--primary-gold);
+}
+
+/* ==========================================================================
+   TEMA DE ALTO CONTRASTE (ACESSIBILIDADE WCAG)
+   ========================================================================== */
+[data-contrast="high"] {
+  /* Substituir variáveis por contrastes extremos */
+  --primary-gold: #ffff00 !important;
+  --primary-red: #ff0000 !important;
+  --primary-dark: #000000 !important;
+  --bg-light: #000000 !important;
+  --bg-dark: #000000 !important;
+  --glass-bg: #000000 !important;
+  --glass-border: #ffff00 !important;
+  --glass-shadow: none !important;
+  --text-main: #ffffff !important;
+  --text-muted: #ffffff !important;
+  --card-hover: #1c1c1c !important;
+  --border-color: #ffff00 !important;
+  --status-apto: #00ff00 !important;
+  --status-inapto: #ff0000 !important;
+  --status-vistoria: #ffff00 !important;
+}
+
+[data-contrast="high"] body {
+  background: #000000 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+}
+
+[data-contrast="high"] header,
+[data-contrast="high"] footer,
+[data-contrast="high"] .glass-card,
+[data-contrast="high"] .hub-card,
+[data-contrast="high"] .term-card,
+[data-contrast="high"] .scanner-card,
+[data-contrast="high"] .vistoria-card,
+[data-contrast="high"] .cnh-card {
+  background: #000000 !important;
+  border: 2px solid #ffff00 !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+}
+
+[data-contrast="high"] a,
+[data-contrast="high"] button,
+[data-contrast="high"] input,
+[data-contrast="high"] textarea,
+[data-contrast="high"] select,
+[data-contrast="high"] .back-btn,
+[data-contrast="high"] .btn-icon,
+[data-contrast="high"] .btn-search,
+[data-contrast="high"] .btn-submit,
+[data-contrast="high"] .filter-btn {
+  background: #000000 !important;
+  color: #ffffff !important;
+  border: 2px solid #ffff00 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+[data-contrast="high"] a:hover,
+[data-contrast="high"] button:hover,
+[data-contrast="high"] .back-btn:hover,
+[data-contrast="high"] .btn-icon:hover,
+[data-contrast="high"] .btn-search:hover,
+[data-contrast="high"] .btn-submit:hover,
+[data-contrast="high"] .filter-btn:hover,
+[data-contrast="high"] .filter-btn.active,
+[data-contrast="high"] .trade-option.active {
+  background: #ffff00 !important;
+  color: #000000 !important;
+  border: 2px solid #ffff00 !important;
+}
+
+[data-contrast="high"] svg {
+  stroke: #ffffff !important;
+}
+
+[data-contrast="high"] button:hover svg,
+[data-contrast="high"] a:hover svg {
+  stroke: #000000 !important;
+}
+
+[data-contrast="high"] .cnae-badge,
+[data-contrast="high"] .badge,
+[data-contrast="high"] .badge-construction,
+[data-contrast="high"] .status-badge,
+[data-contrast="high"] .use-tag,
+[data-contrast="high"] .zone-code-tag,
+[data-contrast="high"] .term-badge {
+  background: #000000 !important;
+  border: 1px solid #ffffff !important;
+  color: #ffffff !important;
+}
+
+[data-contrast="high"] .cnae-badge-apto,
+[data-contrast="high"] .badge-apto,
+[data-contrast="high"] .status-apto {
+  border: 2px solid #00ff00 !important;
+  color: #00ff00 !important;
+}
+
+[data-contrast="high"] .cnae-badge-inapto,
+[data-contrast="high"] .badge-inapto,
+[data-contrast="high"] .status-inapto {
+  border: 2px solid #ff0000 !important;
+  color: #ff0000 !important;
+}
+
+[data-contrast="high"] .cnae-badge-vistoria,
+[data-contrast="high"] .badge-vistoria,
+[data-contrast="high"] .status-vistoria {
+  border: 2px solid #ffff00 !important;
+  color: #ffff00 !important;
+}
+
+[data-contrast="high"] .trade-type-selector {
+  background: #000000 !important;
+  border: 2px solid #ffff00 !important;
+}
+
+[data-contrast="high"] .trade-option {
+  color: #ffffff !important;
+}
+
+/* Simplificação de contraste no mapa Leaflet */
+[data-contrast="high"] .leaflet-tile-container {
+  filter: grayscale(100%) brightness(30%) contrast(150%) invert(100%) !important;
 }
