@@ -1,17 +1,19 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import models
-from database import engine
+from database import engine, get_db
+from sqlalchemy.orm import Session
 import jwt
 import datetime
 import json
 import os
 from shapely.geometry import shape, Point
 
+# Inicializar Tabelas no Banco de Dados
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="API Sistema de Viabilidade Comercial - SEMEPP / Sorocaba")
+app = FastAPI(title="API Sistema de Viabilidade Comercial - Consulta Sorocaba")
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,11 +40,69 @@ if os.path.exists(GEOJSON_PATH):
     except Exception as e:
         print(f"⚠️ Erro ao carregar GeoJSON: {e}")
 
+# Injeção Automática de Dados Iniciais no SQLite para Testes (Seeding)
+@app.on_event("startup")
+def startup_populate_db():
+    db = Session(bind=engine)
+    try:
+        if db.query(models.Ambulante).count() == 0:
+            # 1. Cadastro do Roberto Carlos (Baseado no termo de autorização físico impresso)
+            ambulante1 = models.Ambulante(
+                nome="Roberto Carlos Aparecido Rodrigues",
+                cpf="07194662884", # CPF limpo
+                data_nascimento="28/06/1980", # Data fictícia para login
+                cnpj="N/A",
+                numero_autorizacao="176/2023",
+                local_autorizado="Parque Campolim - Av. Domingos Júlio",
+                categoria="A",
+                produtos="Caldo de Cana e bebidas não alcoólicas",
+                observacao_produtos="Fica expressamente proibida a venda de bebidas alcoólicas no local",
+                dias_autorizados="Todos os dias",
+                horario="8:00 às 18:00",
+                inicio="28/06/2023",
+                termino="28/06/2027", # Ajustada validade para futuro de teste
+                processo_administrativo="1686/2022",
+                status="Ativo",
+                secretario="Paulo Henrique Marcelo",
+                prefeito="Rodrigo Maganhato"
+            )
+            
+            # 2. Cadastro da Maria Oliveira (Demo complementar)
+            ambulante2 = models.Ambulante(
+                nome="Maria Souza Oliveira",
+                cpf="11122233344",
+                data_nascimento="15/05/1990",
+                cnpj="N/A",
+                numero_autorizacao="042/2025",
+                local_autorizado="Praça Coronel Fernando Prestes - Centro",
+                categoria="B",
+                produtos="Pipoca, Algodão Doce e guloseimas",
+                observacao_produtos="Fica proibido obstruir as rampas de acessibilidade ou calçadas",
+                dias_autorizados="Segunda a Sexta",
+                horario="10:00 às 20:00",
+                inicio="10/01/2025",
+                termino="10/01/2027",
+                processo_administrativo="1042/2024",
+                status="Ativo",
+                secretario="Paulo Henrique Marcelo",
+                prefeito="Rodrigo Maganhato"
+            )
+            
+            db.add(ambulante1)
+            db.add(ambulante2)
+            db.commit()
+            print("🌱 Banco de dados SQLite populado com dados de teste com sucesso!")
+    except Exception as e:
+        print(f"⚠️ Erro ao popular banco de dados: {e}")
+    finally:
+        db.close()
+
+# Pydantic Schemas
 class ConsultaRequest(BaseModel):
     latitude: float
     longitude: float
     logradouro: str
-    tipo_comercio: str = "ambulante"  # "ambulante" ou "fixo"
+    tipo_comercio: str = "ambulante"
 
 class ValidarQRRequest(BaseModel):
     token: str
@@ -55,38 +115,38 @@ class VistoriaRequest(BaseModel):
     equipamento_ok: bool
     observacoes: str
 
+class AcessoCarteiraRequest(BaseModel):
+    cpf: str
+    data_nascimento: str
+
+# Endpoints
 @app.get("/")
 def read_root():
-    return {"message": "API SEMEPP Sorocaba online!"}
+    return {"message": "API Consulta Sorocaba online!"}
 
 @app.get("/status")
 def status_check():
     return {"status": "ok", "versao": "1.3.0", "poligonos_carregados": len(camada_zoneamento)}
 
-# Endpoint de Viabilidade Espacial Cruzando Plano Diretor + Leis Municipais de Comércio
+# Endpoint de Viabilidade Espacial Cruzando Plano Diretor + Leis Municipais
 @app.post("/api/viabilidade")
 def avaliar_viabilidade(req: ConsultaRequest):
     ponto = Point(req.longitude, req.latitude)
     zona_encontrada = None
 
-    # Percorre os polígonos da cidade buscando o cruzamento espacial
     for item in camada_zoneamento:
         if item["geometria"].contains(ponto):
-            # Corrige a case sensitivity buscando qualquer variação de nome de propriedade gerada no QGIS/KML
             props = item["propriedades"]
             zona_encontrada = props.get("Name") or props.get("name") or props.get("ZONA") or props.get("zona") or "Zona Mista"
             break
 
-    # Fallback genérico caso o ponto clicado esteja fora dos limites do arquivo GeoJSON
     if not zona_encontrada:
         if -23.4800 <= req.latitude <= -23.4700:
             zona_encontrada = "ZR1 - Zona Residencial 1"
         else:
             zona_encontrada = "ZC - Zona Central"
 
-    # --- REGRAS PARA COMÉRCIO AMBULANTE ---
     if req.tipo_comercio == "ambulante":
-        # Inapto: ZCA (Conservação Ambiental para ambulantes de rua em geral)
         if any(z in zona_encontrada for z in ["ZCA", "Ambiental"]):
             return {
                 "zona": zona_encontrada,
@@ -98,7 +158,6 @@ def avaliar_viabilidade(req: ConsultaRequest):
                     "Vedada ocupação de área verde protegida"
                 ]
             }
-        # ZR1: Ambulantes tradicionais são restritos, mas permite análise de enquadramento
         elif any(z in zona_encontrada for z in ["ZR1", "ZER"]):
             return {
                 "zona": zona_encontrada,
@@ -107,10 +166,9 @@ def avaliar_viabilidade(req: ConsultaRequest):
                 "justificativa": f"Zona Residencial 1 ({zona_encontrada}). Pp. permissível apenas para Atividades de Apoio, Prestação de Serviços sem incômodo ou Eventos Especiais (Art. 118: SEAP, EVC, UE).",
                 "requisitos_legais": [
                     "Verificação de não incômodo ao sossego público",
-                    "Análise especial da SEMEPP para ponto fixo/ambulante"
+                    "Análise especial para ponto fixo/ambulante"
                 ]
             }
-        # Apto: ZC, ZAE, ZI1, ZI2, ZPI e Corredores de Comércio
         elif any(z in zona_encontrada for z in ["ZC", "Central", "ZAE", "ZI1", "ZI2", "ZPI", "CCS", "CCI", "CCR"]):
             return {
                 "zona": zona_encontrada,
@@ -120,25 +178,21 @@ def avaliar_viabilidade(req: ConsultaRequest):
                 "requisitos_legais": [
                     "Equipamento limitado às dimensões máximas de 2,00m x 2,00m",
                     "Manutenção de no mínimo 2,00m de faixa livre para pedestres na calçada",
-                    "Cadastro ativo na SEMEPP e exibição de QR Code de Autorização Digital"
+                    "Cadastro ativo e exibição de QR Code de Autorização Digital"
                 ]
             }
-        # Necessita de Vistoria: ZR2, ZR3, ZR3exp, ZRDS, ZCH, ZRURAL, AEIP, etc.
         else:
             return {
                 "zona": zona_encontrada,
                 "parecer": "Necessita de Vistoria",
                 "tipo": "Comércio Ambulante",
-                "justificativa": f"Zona residencial predominantemente mista ou de expansão ({zona_encontrada}). Requer medição presencial da calçada por fiscal da SEMEPP.",
+                "justificativa": f"Zona residencial predominantemente mista ou de expansão ({zona_encontrada}). Requer medição presencial da calçada por fiscal.",
                 "requisitos_legais": [
                     "Vistoria presencial obrigatória para medição da calçada (mínimo 2 metros livres)",
                     "Verificação de não interferência em garagens, pontos de ônibus e esquinas"
                 ]
             }
-
-    # --- REGRAS PARA COMÉRCIO FIXO ---
     else:
-        # Apto: ZC, ZAE, ZI1, ZI2, ZPI e Corredores de Comércio/Serviços
         if any(z in zona_encontrada for z in ["ZC", "Central", "ZAE", "ZI1", "ZI2", "ZPI", "CCS", "CCI", "CCR", "ZR-C"]):
             return {
                 "zona": zona_encontrada,
@@ -152,7 +206,6 @@ def avaliar_viabilidade(req: ConsultaRequest):
                     "Atividades de baixo risco possuem dispensa nos termos da Liberdade Econômica (Lei 12.346/2021)"
                 ]
             }
-        # ZCA: Permite EVC, TL, UE sob vistoria e licenciamento ambiental
         elif any(z in zona_encontrada for z in ["ZCA", "Ambiental"]):
             return {
                 "zona": zona_encontrada,
@@ -164,7 +217,6 @@ def avaliar_viabilidade(req: ConsultaRequest):
                     "Enquadramento estrito nas categorias EVC, TL ou UE"
                 ]
             }
-        # ZR1: Permite SEAP, EVC, UE sob vistoria e análise de enquadramento de uso
         elif any(z in zona_encontrada for z in ["ZR1", "ZER"]):
             return {
                 "zona": zona_encontrada,
@@ -176,7 +228,6 @@ def avaliar_viabilidade(req: ConsultaRequest):
                     "Ausência de incomodidade sonora ou de tráfego de carga"
                 ]
             }
-        # Necessita de Vistoria: ZR2, ZR3, ZR3exp, ZRDS, ZCH, ZRURAL, AEIP, etc.
         else:
             return {
                 "zona": zona_encontrada,
@@ -189,31 +240,127 @@ def avaliar_viabilidade(req: ConsultaRequest):
                 ]
             }
 
-@app.get("/api/carteira/{cpf_ou_protocolo}")
-def obter_carteira_digital(cpf_ou_protocolo: str):
+# Endpoint POST para validar acesso do ambulante sem senha
+@app.post("/api/carteira/acesso")
+def acessar_carteira(req: AcessoCarteiraRequest, db: Session = Depends(get_db)):
+    # Normalizar o CPF para conter apenas dígitos
+    cpf_limpo = "".join(filter(str.isdigit, req.cpf))
+    
+    # Buscar no banco
+    ambulante = db.query(models.Ambulante).filter(
+        models.Ambulante.cpf == cpf_limpo,
+        models.Ambulante.data_nascimento == req.data_nascimento
+    ).first()
+    
+    if not ambulante:
+        raise HTTPException(
+            status_code=404, 
+            detail="Ambulante não localizado. Verifique se o CPF e a Data de Nascimento foram digitados corretamente."
+        )
+        
+    # Gerar o payload assinado do QR Code contendo as informações da licença
     payload_qr = {
-        "protocolo": "AMB-2026/0482",
-        "titular": "João Carlos da Silva",
-        "cpf": "123.456.789-00",
-        "ponto": "Praça Coronel Fernando Prestes - Centro",
-        "equipamento": "Carrinho de Pipoca (2,00m x 2,00m)",
-        "validade": "31/12/2026",
-        "iss": "SEMEPP Sorocaba",
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=365)
+        "numero_autorizacao": ambulante.numero_autorizacao,
+        "titular": ambulante.nome,
+        "cpf": ambulante.cpf,
+        "cnpj": ambulante.cnpj,
+        "local": ambulante.local_autorizado,
+        "categoria": ambulante.categoria,
+        "produtos": ambulante.produtos,
+        "observacao": ambulante.observacao_produtos,
+        "dias": ambulante.dias_autorizados,
+        "horario": ambulante.horario,
+        "inicio": ambulante.inicio,
+        "termino": ambulante.termino,
+        "processo": ambulante.processo_administrativo,
+        "status": ambulante.status,
+        "secretario": ambulante.secretario,
+        "prefeito": ambulante.prefeito,
+        "exp": (datetime.datetime.utcnow() + datetime.timedelta(days=365)).timestamp()
     }
+    
     token_assinado = jwt.encode(payload_qr, SECRET_KEY_SEMEPP, algorithm="HS256")
-
+    
     return {
-        "status": "Autorização Definitiva Ativa",
-        "protocolo": payload_qr["protocolo"],
-        "titular": payload_qr["titular"],
-        "cpf": payload_qr["cpf"],
-        "ponto_autorizado": payload_qr["ponto"],
-        "equipamento": payload_qr["equipamento"],
-        "validade": payload_qr["validade"],
+        "status": "sucesso",
+        "dados": {
+            "id": ambulante.id,
+            "nome": ambulante.nome,
+            "cpf": ambulante.cpf,
+            "cnpj": ambulante.cnpj,
+            "numero_autorizacao": ambulante.numero_autorizacao,
+            "local_autorizado": ambulante.local_autorizado,
+            "categoria": ambulante.categoria,
+            "produtos": ambulante.produtos,
+            "observacao_produtos": ambulante.observacao_produtos,
+            "dias_autorizados": ambulante.dias_autorizados,
+            "horario": ambulante.horario,
+            "inicio": ambulante.inicio,
+            "termino": ambulante.termino,
+            "processo_administrativo": ambulante.processo_administrativo,
+            "status": ambulante.status,
+            "secretario": ambulante.secretario,
+            "prefeito": ambulante.prefeito,
+            "qr_token": token_assinado
+        }
+    }
+
+# Endpoint GET para retornar dados de carteira por CPF ou nº de Autorização
+@app.get("/api/carteira/{cpf_ou_protocolo}")
+def obter_carteira_digital(cpf_ou_protocolo: str, db: Session = Depends(get_db)):
+    cpf_limpo = "".join(filter(str.isdigit, cpf_ou_protocolo))
+    
+    ambulante = db.query(models.Ambulante).filter(
+        (models.Ambulante.cpf == cpf_limpo) | 
+        (models.Ambulante.numero_autorizacao == cpf_ou_protocolo)
+    ).first()
+    
+    if not ambulante:
+        raise HTTPException(status_code=404, detail="Autorização não localizada.")
+        
+    payload_qr = {
+        "numero_autorizacao": ambulante.numero_autorizacao,
+        "titular": ambulante.nome,
+        "cpf": ambulante.cpf,
+        "cnpj": ambulante.cnpj,
+        "local": ambulante.local_autorizado,
+        "categoria": ambulante.categoria,
+        "produtos": ambulante.produtos,
+        "observacao": ambulante.observacao_produtos,
+        "dias": ambulante.dias_autorizados,
+        "horario": ambulante.horario,
+        "inicio": ambulante.inicio,
+        "termino": ambulante.termino,
+        "processo": ambulante.processo_administrativo,
+        "status": ambulante.status,
+        "secretario": ambulante.secretario,
+        "prefeito": ambulante.prefeito,
+        "exp": (datetime.datetime.utcnow() + datetime.timedelta(days=365)).timestamp()
+    }
+    
+    token_assinado = jwt.encode(payload_qr, SECRET_KEY_SEMEPP, algorithm="HS256")
+    
+    return {
+        "status": ambulante.status,
+        "protocolo": ambulante.numero_autorizacao,
+        "titular": ambulante.nome,
+        "cpf": ambulante.cpf,
+        "cnpj": ambulante.cnpj,
+        "ponto_autorizado": ambulante.local_autorizado,
+        "categoria": ambulante.categoria,
+        "produtos": ambulante.produtos,
+        "observacao": ambulante.observacao_produtos,
+        "dias_autorizados": ambulante.dias_autorizados,
+        "horario": ambulante.horario,
+        "inicio": ambulante.inicio,
+        "validade": ambulante.termino,
+        "processo_administrativo": ambulante.processo_administrativo,
+        "secretario": ambulante.secretario,
+        "prefeito": ambulante.prefeito,
         "qr_token": token_assinado
     }
 
+# Validação do Token do QR Code do Permissionário
 @app.post("/api/fiscal/validar-qr")
 def validar_qr_code(req: ValidarQRRequest):
     try:
