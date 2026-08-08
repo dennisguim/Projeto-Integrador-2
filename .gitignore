@@ -3,3 +3,5 @@
 /.venv
 /backend/__pycache__
 *.md
+/leis
+/prints
