@@ -12,31 +12,40 @@
   
   <!-- HTML5 QR Code Scanner via CDN -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- QRCode.js para exibir o QR Code no modal do fiscal -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
   <!-- CSS Principal -->
   <link rel="stylesheet" href="css/style.css">
 
   <style>
+    .fiscal-container {
+      max-width: 1000px;
+      margin: 2rem auto;
+      width: 100%;
+    }
+
     .fiscal-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 1.5rem;
       margin-top: 1.5rem;
     }
 
-    @media (max-width: 850px) {
-      .fiscal-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .scanner-card, .vistoria-card {
+    .scanner-card, .vistoria-card, .busca-card {
       backdrop-filter: blur(16px);
       background: var(--glass-bg);
       border: 1px solid var(--glass-border);
       border-radius: 20px;
       padding: 1.5rem;
       box-shadow: var(--glass-shadow);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Card de Busca expande no layout */
+    .busca-card {
+      grid-column: 1 / -1;
     }
 
     #reader {
@@ -66,6 +75,12 @@
       background: rgba(255,255,255,0.5);
       color: var(--text-main);
       outline: none;
+      font-size: 0.95rem;
+      transition: border-color var(--transition-fast);
+    }
+
+    .form-input:focus {
+      border-color: var(--primary-gold);
     }
 
     [data-theme="dark"] .form-input {
@@ -82,6 +97,11 @@
       width: 100%;
       cursor: pointer;
       margin-top: 0.5rem;
+      transition: transform var(--transition-fast);
+    }
+
+    .btn-submit:hover {
+      transform: scale(1.02);
     }
 
     .result-box {
@@ -102,6 +122,153 @@
       border: 1px solid var(--status-inapto);
       color: var(--status-inapto);
     }
+
+    /* Resultados de Busca */
+    .search-results-list {
+      margin-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .search-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      border-radius: 10px;
+      background: rgba(0,0,0,0.02);
+      border: 1px solid var(--glass-border);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    [data-theme="dark"] .search-item {
+      background: rgba(255,255,255,0.02);
+    }
+
+    .search-item:hover {
+      background: rgba(230, 161, 0, 0.08);
+      border-color: var(--primary-gold);
+    }
+
+    /* Modal com a CNH e Termo Físico */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      z-index: 10000;
+      justify-content: center;
+      align-items: center;
+      padding: 1rem;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--bg-light);
+      border-radius: 24px;
+      max-width: 500px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      position: relative;
+    }
+
+    [data-theme="dark"] .modal-content {
+      background: var(--bg-dark);
+    }
+
+    .btn-close-modal {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: var(--status-inapto);
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 11;
+      font-weight: bold;
+    }
+
+    .btn-close-modal:hover {
+      background: var(--status-inapto);
+      color: #fff;
+    }
+
+    /* Reutilização dos estilos CNH no modal */
+    .cnh-card {
+      background: linear-gradient(145deg, var(--glass-bg), rgba(230, 161, 0, 0.08));
+      border-radius: 24px;
+      padding: 2rem;
+      position: relative;
+    }
+    .cnh-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid var(--primary-gold);
+      padding-bottom: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .cnh-title h3 {
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: var(--primary-gold);
+    }
+    .cnh-title p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .cnh-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1.1rem;
+    }
+    .cnh-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .cnh-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .cnh-value {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .qrcode-wrapper {
+      background: #fff;
+      padding: 1rem;
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1.5rem;
+      border: 1px solid var(--glass-border);
+    }
   </style>
 </head>
 <body>
@@ -120,6 +287,9 @@
     </div>
 
     <div class="header-controls">
+      <button class="btn-icon" id="btn-logout-fiscal" title="Encerrar Sessão Fiscal" style="display: none; border-color: rgba(239, 68, 68, 0.4); color: var(--status-inapto);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-log-out"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
       <a href="index.html" class="btn-icon" title="Voltar ao Inicio" style="text-decoration:none;">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-home"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
       </a>
@@ -127,71 +297,232 @@
     </div>
   </header>
 
-  <main class="main-container">
-    <div class="fiscal-grid">
-      
-      <!-- Coluna 1: Leitor de QR Code -->
-      <div class="scanner-card">
-        <h3 style="display: flex; align-items: center; gap: 6px; margin-bottom: 0.5rem;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-camera"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>
-          Validador de QR Code do Ambulante
-        </h3>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-          Aponte a câmera para o QR Code exibido na Carteira Digital do comerciante.
-        </p>
+  <main class="main-container fiscal-container">
 
-        <div id="reader"></div>
+    <!-- Painel de Login do Fiscal (Bloqueia o Acesso) -->
+    <div id="login-fiscal-container" class="glass-card" style="max-width: 480px; margin: 2rem auto; width: 100%;">
+      <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield-alert"><path d="M20 13c0 5-3.5 7.5-7.66 9.7a1 1 0 0 1-.68 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 .76-.97l8-2a1 1 0 0 1 .48 0l8 2A1 1 0 0 1 20 6z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+        Identificação do Fiscal
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+        Área restrita. Insira seu usuário e senha credenciados para liberar o terminal.
+      </p>
 
-        <div id="qr-result" class="result-box">
-          <strong id="qr-result-title" style="display: flex; align-items: center; gap: 6px;"></strong>
-          <p id="qr-result-desc" style="font-size: 0.85rem; margin-top: 0.5rem; color: var(--text-main); line-height: 1.4;"></p>
+      <form id="form-login-fiscal">
+        <div class="form-group">
+          <label for="login-usuario">Usuário</label>
+          <input type="text" id="login-usuario" class="form-input" placeholder="ex: fiscal" required autocomplete="off" />
         </div>
+        <div class="form-group">
+          <label for="login-senha">Senha</label>
+          <input type="password" id="login-senha" class="form-input" placeholder="••••••••" required autocomplete="off" />
+        </div>
+        
+        <div id="login-error" style="color: var(--status-inapto); font-size: 0.85rem; font-weight: 600; margin-bottom: 1rem; display: none; background: rgba(239, 68, 68, 0.1); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.2);"></div>
+
+        <button type="submit" class="btn-submit">Acessar Painel</button>
+      </form>
+    </div>
+
+    <!-- Painel de Trabalho do Fiscal (Invisível por Padrão) -->
+    <div id="fiscal-panel" style="display: none;">
+      <div class="fiscal-grid">
+        
+        <!-- Card de Busca de Permissionários -->
+        <div class="busca-card">
+          <h3 style="display: flex; align-items: center; gap: 8px; margin-bottom: 0.5rem;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-users"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Pesquisa de Permissionários (Ambulantes)
+          </h3>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Busque permissionários cadastrados na cidade por Nome, CPF ou Nº da Autorização (TAU).
+          </p>
+
+          <form id="form-busca-ambulante" style="display: flex; gap: 0.75rem;">
+            <input type="text" id="busca-input" class="form-input" style="flex:1;" placeholder="Digite o nome ou CPF..." autocomplete="off" />
+            <button type="submit" class="btn-submit" style="width: auto; margin-top: 0; padding: 0 1.5rem;">Pesquisar</button>
+          </form>
+
+          <div id="resultados-busca-container" class="search-results-list" style="display: none;">
+            <!-- Resultados injetados dinamicamente -->
+          </div>
+        </div>
+
+        <!-- Coluna 1: Leitor de QR Code -->
+        <div class="scanner-card">
+          <h3 style="display: flex; align-items: center; gap: 6px; margin-bottom: 0.5rem;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-camera"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>
+            Validador de QR Code
+          </h3>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Aponte a câmera para o QR Code exibido na Carteira Digital do permissionário.
+          </p>
+
+          <div id="reader"></div>
+
+          <div id="qr-result" class="result-box">
+            <strong id="qr-result-title" style="display: flex; align-items: center; gap: 6px;"></strong>
+            <p id="qr-result-desc" style="font-size: 0.85rem; margin-top: 0.5rem; color: var(--text-main); line-height: 1.4;"></p>
+          </div>
+        </div>
+
+        <!-- Coluna 2: Formulário de Vistoria de Campo -->
+        <div class="vistoria-card">
+          <h3 style="display: flex; align-items: center; gap: 6px; margin-bottom: 0.5rem;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-clipboard-signature"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path><path d="M16 4h2a2 2 0 0 1 2 2v4"></path><path d="M21 14H11"></path><path d="m15 10-4 4 4 4"></path></svg>
+            Registro de Vistoria de Calçada
+          </h3>
+          <form id="form-vistoria" style="margin-top: 0.5rem;">
+            
+            <div class="form-group">
+              <label for="f-protocolo">Protocolo / Nº Licença</label>
+              <input type="text" id="f-protocolo" class="form-input" placeholder="ex: 176/2023" required />
+            </div>
+
+            <div class="form-group">
+              <label for="f-fiscal">Nome do Fiscal</label>
+              <input type="text" id="f-fiscal" class="form-input" value="Fiscal Carlos Eduardo" readonly required />
+            </div>
+
+            <div class="form-group">
+              <label for="f-calcada">Largura da Calçada (Metros)</label>
+              <input type="number" step="0.1" id="f-calcada" class="form-input" placeholder="ex: 3.5" required />
+            </div>
+
+            <div class="form-group" style="flex-direction:row; align-items:center; gap:0.5rem;">
+              <input type="checkbox" id="f-faixa-livre" checked />
+              <label for="f-faixa-livre" style="margin:0;">Faixa livre para pedestres garantida (mín. 1,20m)</label>
+            </div>
+
+            <div class="form-group" style="flex-direction:row; align-items:center; gap:0.5rem;">
+              <input type="checkbox" id="f-equipamento" checked />
+              <label for="f-equipamento" style="margin:0;">Equipamento dentro do limite (2,00m x 2,00m)</label>
+            </div>
+
+            <div class="form-group">
+              <label for="f-obs">Observações do Fiscal</label>
+              <textarea id="f-obs" class="form-input" rows="3" placeholder="Informações relevantes sobre a vistoria..."></textarea>
+            </div>
+
+            <button type="submit" class="btn-submit">Salvar Vistoria no Servidor</button>
+          </form>
+        </div>
+
       </div>
-
-      <!-- Coluna 2: Formulário de Vistoria de Campo -->
-      <div class="vistoria-card">
-        <h3 style="display: flex; align-items: center; gap: 6px; margin-bottom: 0.5rem;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-clipboard-signature"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path><path d="M16 4h2a2 2 0 0 1 2 2v4"></path><path d="M21 14H11"></path><path d="m15 10-4 4 4 4"></path></svg>
-          Registro de Vistoria de Calçada
-        </h3>
-        <form id="form-vistoria" style="margin-top: 1rem;">
-          
-          <div class="form-group">
-            <label for="f-protocolo">Protocolo / Nº Licença</label>
-            <input type="text" id="f-protocolo" class="form-input" placeholder="ex: AMB-2026/0482" required />
-          </div>
-
-          <div class="form-group">
-            <label for="f-fiscal">Nome do Fiscal</label>
-            <input type="text" id="f-fiscal" class="form-input" value="Fiscal Carlos Eduardo" required />
-          </div>
-
-          <div class="form-group">
-            <label for="f-calcada">Largura da Calçada (Metros)</label>
-            <input type="number" step="0.1" id="f-calcada" class="form-input" placeholder="ex: 3.5" required />
-          </div>
-
-          <div class="form-group" style="flex-direction:row; align-items:center; gap:0.5rem;">
-            <input type="checkbox" id="f-faixa-livre" checked />
-            <label for="f-faixa-livre" style="margin:0;">Faixa livre para pedestres garantida (mín. 1,20m)</label>
-          </div>
-
-          <div class="form-group" style="flex-direction:row; align-items:center; gap:0.5rem;">
-            <input type="checkbox" id="f-equipamento" checked />
-            <label for="f-equipamento" style="margin:0;">Equipamento dentro do limite (2,00m x 2,00m)</label>
-          </div>
-
-          <div class="form-group">
-            <label for="f-obs">Observações do Fiscal</label>
-            <textarea id="f-obs" class="form-input" rows="3" placeholder="Informações relevantes sobre a vistoria..."></textarea>
-          </div>
-
-          <button type="submit" class="btn-submit">Salvar Vistoria no Servidor</button>
-        </form>
-      </div>
-
     </div>
   </main>
+
+  <!-- Modal do Detalhe da Licença (Pop-up CNH) -->
+  <div id="modal-licenca" class="modal">
+    <div class="modal-content">
+      <button class="btn-close-modal" id="btn-fechar-modal" title="Fechar Visualização">X</button>
+      
+      <div class="cnh-card">
+        <div class="cnh-header">
+          <div class="cnh-brasao">
+            <div class="header-logo-wrapper" style="padding: 4px 8px;">
+              <img src="img/logo-sorocaba.png" alt="Brasão Sorocaba" style="height: 38px; width: auto;" />
+            </div>
+          </div>
+          <div class="cnh-title">
+            <h3>TERMO DE AUTORIZAÇÃO DE USO (TAU)</h3>
+            <p>Prefeitura Municipal de Sorocaba</p>
+          </div>
+          <span class="status-badge" id="modal-status" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; font-weight: 700; padding: 4px 8px; border-radius: 12px;">-</span>
+        </div>
+
+        <div class="cnh-body">
+          <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1rem;">
+            <div class="cnh-row">
+              <span class="cnh-label">Número da Autorização</span>
+              <span class="cnh-value" id="modal-protocolo">-</span>
+            </div>
+            <div class="cnh-row">
+              <span class="cnh-label">Categoria</span>
+              <span class="cnh-value" id="modal-categoria">-</span>
+            </div>
+          </div>
+
+          <div class="cnh-row">
+            <span class="cnh-label">Nome do Permissionário</span>
+            <span class="cnh-value" id="modal-titular">-</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1rem;">
+            <div class="cnh-row">
+              <span class="cnh-label">CPF</span>
+              <span class="cnh-value" id="modal-cpf">-</span>
+            </div>
+            <div class="cnh-row">
+              <span class="cnh-label">CNPJ</span>
+              <span class="cnh-value" id="modal-cnpj">-</span>
+            </div>
+          </div>
+
+          <div class="cnh-row">
+            <span class="cnh-label">Local Autorizado</span>
+            <span class="cnh-value" id="modal-ponto">-</span>
+          </div>
+
+          <div class="cnh-row">
+            <span class="cnh-label">Produtos Autorizados</span>
+            <span class="cnh-value" id="modal-produtos">-</span>
+          </div>
+
+          <!-- Caixa de Restrições/Observações -->
+          <div id="modal-observacao-box" class="cnh-row" style="background: rgba(230, 161, 0, 0.08); padding: 8px 12px; border-radius: 8px; border-left: 3px solid var(--primary-gold); display: none;">
+            <span class="cnh-label" style="color: var(--primary-gold); font-weight: 700; font-size: 0.65rem;">Restrição / Observação</span>
+            <span class="cnh-value" id="modal-observacao" style="font-size: 0.82rem; font-weight: 600; line-height: 1.35; color: var(--text-main);">-</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="cnh-row">
+              <span class="cnh-label">Dias Autorizados</span>
+              <span class="cnh-value" id="modal-dias">-</span>
+            </div>
+            <div class="cnh-row">
+              <span class="cnh-label">Horário de Funcionamento</span>
+              <span class="cnh-value" id="modal-horario">-</span>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="cnh-row">
+              <span class="cnh-label">Data de Início</span>
+              <span class="cnh-value" id="modal-inicio">-</span>
+            </div>
+            <div class="cnh-row">
+              <span class="cnh-label">Data de Término</span>
+              <span class="cnh-value" id="modal-validade" style="color: var(--primary-gold);">-</span>
+            </div>
+          </div>
+
+          <div class="cnh-row">
+            <span class="cnh-label">Processo Administrativo</span>
+            <span class="cnh-value" id="modal-processo">-</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; border-top: 1px dashed var(--border-color); padding-top: 0.75rem; margin-top: 0.5rem;">
+            <div class="cnh-row">
+              <span class="cnh-label" style="font-size: 0.62rem;">Secretário SDU</span>
+              <span class="cnh-value" id="modal-secretario" style="font-size: 0.85rem; font-weight: 600;">-</span>
+            </div>
+            <div class="cnh-row">
+              <span class="cnh-label" style="font-size: 0.62rem;">Prefeito Municipal</span>
+              <span class="cnh-value" id="modal-prefeito" style="font-size: 0.85rem; font-weight: 600;">-</span>
+            </div>
+          </div>
+
+          <!-- Gerador de QR Code Assinado para teste de scan local -->
+          <div class="qrcode-wrapper">
+            <div id="modal-qrcode"></div>
+            <span style="font-size: 0.72rem; color: #475569; font-weight:600; text-align: center;">Validação do Fiscal Ativa</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="js/app.js"></script>
   <script src="js/fiscal.js"></script>
