@@ -1,67 +1,204 @@
-document.addEventListener('DOMContentLoaded', () => {
-  carregarCarteiraDigital();
-});
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Consulta Sorocaba - Carteira Digital do Ambulante</title>
 
-async function carregarCarteiraDigital() {
-  const PROTOCOLO_DEMO = "AMB-2026/0482";
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   
-  try {
-    // Tenta buscar dados atualizados do backend
-    const response = await fetch(`http://localhost:8000/api/carteira/${PROTOCOLO_DEMO}`);
-    if (!response.ok) throw new Error("Falha ao buscar dados do servidor");
+  <!-- QRCode.js via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-    const dados = await response.json();
+  <!-- CSS Principal -->
+  <link rel="stylesheet" href="css/style.css">
 
-    // Atualiza a tela
-    renderizarDados(dados);
-
-    // Salva no Cache Local (Offline-First)
-    localStorage.setItem("carteira_cache", JSON.stringify(dados));
-
-  } catch (error) {
-    console.warn("Sem conexão com o servidor. Carregando dados do Cache Offline...", error);
-
-    // Busca do Cache Local se estiver Offline
-    const dadosSalvos = localStorage.getItem("carteira_cache");
-    if (dadosSalvos) {
-      const dadosCache = JSON.parse(dadosSalvos);
-      renderizarDados(dadosCache);
-      alert("Você está visualizando sua carteira salva em modo Offline.");
-    } else {
-      // Fallback inicial padrão
-      const fallback = {
-        status: "Autorização Definitiva Ativa",
-        protocolo: "AMB-2026/0482",
-        titular: "João Carlos da Silva",
-        cpf: "123.456.789-00",
-        ponto_autorizado: "Praça Coronel Fernando Prestes - Centro",
-        equipamento: "Carrinho de Pipoca (2,00m x 2,00m)",
-        validade: "31/12/2026",
-        qr_token: "SOROCABA_OFFLINE_TOKEN_DEMO_2026"
-      };
-      renderizarDados(fallback);
+  <style>
+    .carteira-container {
+      max-width: 480px;
+      margin: 2rem auto;
     }
-  }
-}
 
-function renderizarDados(dados) {
-  document.getElementById('cnh-protocolo').innerText = dados.protocolo;
-  document.getElementById('cnh-titular').innerText = dados.titular;
-  document.getElementById('cnh-cpf').innerText = dados.cpf;
-  document.getElementById('cnh-ponto').innerText = dados.ponto_autorizado;
-  document.getElementById('cnh-equipamento').innerText = dados.equipamento;
-  document.getElementById('cnh-validade').innerText = dados.validade;
+    .cnh-card {
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      background: linear-gradient(145deg, var(--glass-bg), rgba(230, 161, 0, 0.08));
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 2rem;
+      box-shadow: var(--glass-shadow);
+      position: relative;
+      overflow: hidden;
+    }
 
-  // Limpa e gera novo QR Code
-  const qrContainer = document.getElementById('qrcode');
-  qrContainer.innerHTML = '';
+    .cnh-card::after {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+      pointer-events: none;
+    }
 
-  new QRCode(qrContainer, {
-    text: dados.qr_token,
-    width: 160,
-    height: 160,
-    colorDark : "#0f172a",
-    colorLight : "#ffffff",
-    correctLevel : QRCode.CorrectLevel.H
-  });
-}
+    .cnh-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid var(--primary-gold);
+      padding-bottom: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .cnh-brasao {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary-gold);
+    }
+
+    .cnh-title h3 {
+      font-size: 1rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: var(--primary-gold);
+    }
+
+    .cnh-title p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .cnh-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+
+    .cnh-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .cnh-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+
+    .cnh-value {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .qrcode-wrapper {
+      background: #fff;
+      padding: 1rem;
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1.5rem;
+      border: 1px solid var(--glass-border);
+    }
+
+    #qrcode img {
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="brand">
+      <a href="index.html" style="display:flex; align-items:center; text-decoration:none;">
+        <div class="brand-logo-wrapper">
+          <img src="img/logo-sorocaba.png" alt="Prefeitura de Sorocaba" class="brand-logo" />
+        </div>
+      </a>
+      <div class="brand-text">
+        <h1>Consulta Sorocaba</h1>
+        <p>Carteira Digital do Permissionário</p>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <a href="index.html" class="btn-icon" title="Voltar ao Inicio" style="text-decoration:none;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-home"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+      </a>
+      <button class="btn-icon" id="theme-toggle"></button>
+    </div>
+  </header>
+
+  <main class="main-container carteira-container">
+    
+    <div class="cnh-card">
+      <div class="cnh-header">
+        <div class="cnh-brasao">
+          <div class="header-logo-wrapper" style="padding: 4px 8px;">
+            <img src="img/logo-sorocaba.png" alt="Brasão Prefeitura de Sorocaba" style="height: 38px; width: auto;" />
+          </div>
+        </div>
+        <div class="cnh-title">
+          <h3>AUTORIZAÇÃO DIGITAL DE AMBULANTE</h3>
+          <p>Prefeitura Municipal de Sorocaba</p>
+        </div>
+        <span class="status-badge status-apto" id="cnh-status" style="display: inline-flex; align-items: center; gap: 4px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+          Ativo
+        </span>
+      </div>
+
+      <div class="cnh-body">
+        <div class="cnh-row">
+          <span class="cnh-label">Número do Protocolo / Alvará</span>
+          <span class="cnh-value" id="cnh-protocolo">AMB-2026/0482</span>
+        </div>
+
+        <div class="cnh-row">
+          <span class="cnh-label">Nome do Permissionário</span>
+          <span class="cnh-value" id="cnh-titular">João Carlos da Silva</span>
+        </div>
+
+        <div class="cnh-row">
+          <span class="cnh-label">CPF</span>
+          <span class="cnh-value" id="cnh-cpf">123.456.789-00</span>
+        </div>
+
+        <div class="cnh-row">
+          <span class="cnh-label">Ponto Comercial Autorizado</span>
+          <span class="cnh-value" id="cnh-ponto">Praça Coronel Fernando Prestes - Centro</span>
+        </div>
+
+        <div class="cnh-row">
+          <span class="cnh-label">Especificação do Equipamento</span>
+          <span class="cnh-value" id="cnh-equipamento">Carrinho de Pipoca (2,00m x 2,00m)</span>
+        </div>
+
+        <div class="cnh-row">
+          <span class="cnh-label">Validade da Licença</span>
+          <span class="cnh-value" id="cnh-validade" style="color: var(--primary-gold);">31/12/2026</span>
+        </div>
+
+        <!-- Gerador de QR Code Assinado -->
+        <div class="qrcode-wrapper">
+          <div id="qrcode"></div>
+          <span style="font-size: 0.72rem; color: #475569; font-weight:600; text-align: center;">Escaneie para validação do Fiscal</span>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="js/app.js"></script>
+  <script src="js/carteira.js"></script>
+</body>
+</html>
