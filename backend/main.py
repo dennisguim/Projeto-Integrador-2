@@ -45,53 +45,187 @@ if os.path.exists(GEOJSON_PATH):
 def startup_populate_db():
     db = Session(bind=engine)
     try:
-        if db.query(models.Ambulante).count() == 0:
-            # 1. Cadastro do Roberto Carlos (Baseado no termo de autorização físico impresso)
-            ambulante1 = models.Ambulante(
-                nome="Roberto Carlos Aparecido Rodrigues",
-                cpf="07194662884", # CPF limpo
-                data_nascimento="28/06/1980", # Data fictícia para login
-                cnpj="N/A",
-                numero_autorizacao="176/2023",
-                local_autorizado="Parque Campolim - Av. Domingos Júlio",
-                categoria="A",
-                produtos="Caldo de Cana e bebidas não alcoólicas",
-                observacao_produtos="Fica expressamente proibida a venda de bebidas alcoólicas no local",
-                dias_autorizados="Todos os dias",
-                horario="8:00 às 18:00",
-                inicio="28/06/2023",
-                termino="28/06/2027", # Ajustada validade para futuro de teste
-                processo_administrativo="1686/2022",
-                status="Ativo",
-                secretario="Paulo Henrique Marcelo",
-                prefeito="Rodrigo Maganhato"
-            )
-            
-            # 2. Cadastro da Maria Oliveira (Demo complementar)
-            ambulante2 = models.Ambulante(
-                nome="Maria Souza Oliveira",
-                cpf="11122233344",
-                data_nascimento="15/05/1990",
-                cnpj="N/A",
-                numero_autorizacao="042/2025",
-                local_autorizado="Praça Coronel Fernando Prestes - Centro",
-                categoria="B",
-                produtos="Pipoca, Algodão Doce e guloseimas",
-                observacao_produtos="Fica proibido obstruir as rampas de acessibilidade ou calçadas",
-                dias_autorizados="Segunda a Sexta",
-                horario="10:00 às 20:00",
-                inicio="10/01/2025",
+        # Garantir a remoção completa de dados antigos de produção/reais
+        db.query(models.Ambulante).delete()
+        db.commit()
+
+        # Inserção dos 10 Ambulantes Fictícios
+        ambulantes_ficticios = [
+            models.Ambulante(
+                nome="Carlos Augusto Pereira",
+                cpf="12345678901",
+                data_nascimento="12/04/1978",
+                cnpj="45.123.789/0001-90",
+                numero_autorizacao="012/2024",
+                local_autorizado="Av. Antônio Carlos Comitre, 1200 - Campolim",
+                categoria="A (Veículos Adaptados)",
+                produtos="Hambúrgueres artesanais, batatas fritas e refrigerantes",
+                observacao_produtos="Fica expressamente proibida a venda de bebidas alcoólicas no local. Equipamento deve ser removido ao fim do expediente.",
+                dias_autorizados="Quinta a Domingo",
+                horario="18:00 às 23:30",
+                inicio="10/01/2024",
                 termino="10/01/2027",
-                processo_administrativo="1042/2024",
-                status="Ativo",
-                secretario="Paulo Henrique Marcelo",
-                prefeito="Rodrigo Maganhato"
+                processo_administrativo="4562/2023",
+                status="Ativo"
+            ),
+            models.Ambulante(
+                nome="Ana Maria de Souza",
+                cpf="23456789012",
+                data_nascimento="25/09/1982",
+                cnpj="N/A",
+                numero_autorizacao="045/2025",
+                local_autorizado="Praça Coronel Fernando Prestes - Centro",
+                categoria="B (Carrinhos e Tabuleiros)",
+                produtos="Pipoca doce e salgada, algodão doce e água mineral",
+                observacao_produtos="Uso obrigatório de sachês individuais. Proibido obstruir rampas e acessos PCD.",
+                dias_autorizados="Segunda a Sábado",
+                horario="09:00 às 19:00",
+                inicio="15/02/2025",
+                termino="15/02/2027",
+                processo_administrativo="1202/2024",
+                status="Ativo"
+            ),
+            models.Ambulante(
+                nome="Marcos Vinícius Santos",
+                cpf="34567890123",
+                data_nascimento="05/11/1990",
+                cnpj="N/A",
+                numero_autorizacao="089/2024",
+                local_autorizado="Rua Álvaro Soares, 150 - Terminal Santo Antônio",
+                categoria="C (Barracas Desmontáveis)",
+                produtos="Pastel de feira, salgados fritos e caldo de cana",
+                observacao_produtos="Proibida venda de álcool. Certificado de manipulação de alimentos da Vigilância Sanitária em dia.",
+                dias_autorizados="Terça, Quinta e Sábado",
+                horario="07:00 às 14:00",
+                inicio="01/03/2024",
+                termino="01/03/2027",
+                processo_administrativo="8933/2023",
+                status="Ativo"
+            ),
+            models.Ambulante(
+                nome="José Geraldo Lima",
+                cpf="45678901234",
+                data_nascimento="30/08/1965",
+                cnpj="N/A",
+                numero_autorizacao="102/2024",
+                local_autorizado="Itinerante (Porta a Porta) - Wanel Ville e Jd. Júlio de Mesquita",
+                categoria="B (Itinerante)",
+                produtos="Sorvetes, picolés e geladinhos embalados",
+                observacao_produtos="Fica vedada a permanência estacionária por mais de 15 minutos no mesmo ponto.",
+                dias_autorizados="Todos os dias",
+                horario="10:00 às 18:00",
+                inicio="12/04/2024",
+                termino="12/04/2027",
+                processo_administrativo="2311/2024",
+                status="Ativo"
+            ),
+            models.Ambulante(
+                nome="Sandra Helena Gomes",
+                cpf="56789012345",
+                data_nascimento="17/02/1974",
+                cnpj="51.987.654/0001-32",
+                numero_autorizacao="156/2023",
+                local_autorizado="Parque das Águas - Jardim Abaeté",
+                categoria="B (Carrinhos e Tabuleiros)",
+                produtos="Água de coco natural e sucos engarrafados",
+                observacao_produtos="Responsável por recolher o lixo gerado pelo consumo. Proibido álcool.",
+                dias_autorizados="Sábado, Domingo e Feriados",
+                horario="08:00 às 18:00",
+                inicio="20/09/2023",
+                termino="20/09/2027",
+                processo_administrativo="7422/2023",
+                status="Ativo"
+            ),
+            models.Ambulante(
+                nome="Ricardo Dias Barbosa",
+                cpf="67890123456",
+                data_nascimento="02/07/1987",
+                cnpj="N/A",
+                numero_autorizacao="210/2024",
+                local_autorizado="Av. Ipanema, 500 - Vila Nova Sorocaba",
+                categoria="C (Barracas Desmontáveis)",
+                produtos="Milho verde cozido, pamonha e curau",
+                observacao_produtos="Manter distância mínima de 5 metros de esquinas e pontos de ônibus.",
+                dias_autorizados="Segunda a Sexta",
+                horario="14:00 às 21:00",
+                inicio="05/06/2024",
+                termino="05/06/2027",
+                processo_administrativo="3051/2024",
+                status="Ativo"
+            ),
+            models.Ambulante(
+                nome="Patrícia Alessandra Vieira",
+                cpf="78901234567",
+                data_nascimento="21/10/1983",
+                cnpj="48.332.112/0001-09",
+                numero_autorizacao="033/2025",
+                local_autorizado="Rua Lituânia, 300 - Jardim Europa",
+                categoria="A (Veículos Adaptados)",
+                produtos="Churros gourmet, waffles e sucos rápidos",
+                observacao_produtos="Proibido estacionar sobre a calçada. Desmobilização obrigatória do reboque pós expediente.",
+                dias_autorizados="Sexta, Sábado e Domingo",
+                horario="16:00 às 22:00",
+                inicio="01/02/2025",
+                termino="01/02/2027",
+                processo_administrativo="5012/2024",
+                status="Ativo"
+            ),
+            models.Ambulante(
+                nome="Antônio Luiz Gonzaga",
+                cpf="89012345678",
+                data_nascimento="14/01/1959",
+                cnpj="N/A",
+                numero_autorizacao="112/2023",
+                local_autorizado="Av. Dom Aguirre - Marginal (Próximo à Praça da PM)",
+                categoria="B (Carrinhos e Tabuleiros)",
+                produtos="Açaí no copo, salada de frutas e garrafas de água",
+                observacao_produtos="Obrigatoriedade de preservar a faixa livre contínua de 1,20m na calçada para pedestres.",
+                dias_autorizados="Sábado e Domingo",
+                horario="09:00 às 17:00",
+                inicio="10/05/2023",
+                termino="10/05/2027",
+                processo_administrativo="9088/2022",
+                status="Ativo"
+            ),
+            models.Ambulante(
+                nome="Juliana Faria Mendes",
+                cpf="90123456789",
+                data_nascimento="30/03/1995",
+                cnpj="N/A",
+                numero_autorizacao="028/2025",
+                local_autorizado="Praça Nove de Julho - Centro",
+                categoria="C (Barracas Desmontáveis)",
+                produtos="Artesanatos de crochê, bijuterias e panos de prato",
+                observacao_produtos="Instalação exclusiva na demarcação reservada para a feira de artesanato regional.",
+                dias_autorizados="Quinta e Sexta",
+                horario="09:00 às 18:00",
+                inicio="20/01/2025",
+                termino="20/01/2027",
+                processo_administrativo="0055/2025",
+                status="Ativo"
+            ),
+            models.Ambulante(
+                nome="Cláudio Roberto Almeida",
+                cpf="01234567890",
+                data_nascimento="08/08/1971",
+                cnpj="N/A",
+                numero_autorizacao="077/2024",
+                local_autorizado="Rua Doutor Braguinha - Calçadão do Centro",
+                categoria="B (Carrinhos e Tabuleiros)",
+                produtos="Cachorro-quente simples e latas de refrigerante",
+                observacao_produtos="Sachês de condimentos individuais obrigatórios. Proibido som mecânico no entorno.",
+                dias_autorizados="Segunda a Sábado",
+                horario="11:00 às 20:00",
+                inicio="15/08/2024",
+                termino="15/08/2027",
+                processo_administrativo="6099/2023",
+                status="Ativo"
             )
-            
-            db.add(ambulante1)
-            db.add(ambulante2)
-            db.commit()
-            print("🌱 Banco de dados SQLite populado com dados de teste com sucesso!")
+        ]
+
+        db.add_all(ambulantes_ficticios)
+        db.commit()
+        print("🌱 Banco SQLite limpo e populado com 10 ambulantes fictícios de Sorocaba com sucesso!")
     except Exception as e:
         print(f"⚠️ Erro ao popular banco de dados: {e}")
     finally:
@@ -153,7 +287,7 @@ def avaliar_viabilidade(req: ConsultaRequest):
     if req.tipo_comercio == "ambulante":
         if any(z in zona_encontrada for z in ["ZCA", "Ambiental"]):
             return {
-                "zona": zona_encontrada,
+                "zona": zona_enacted,
                 "parecer": "Inapto",
                 "tipo": "Comércio Ambulante",
                 "justificativa": f"Zona de Conservação Ambiental ({zona_encontrada}). Proibida a instalação de equipamentos comerciais informais em vias públicas de preservação.",
