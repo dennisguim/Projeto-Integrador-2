@@ -119,6 +119,10 @@ class AcessoCarteiraRequest(BaseModel):
     cpf: str
     data_nascimento: str
 
+class FiscalLoginRequest(BaseModel):
+    usuario: str
+    senha: str
+
 # Endpoints
 @app.get("/")
 def read_root():
@@ -243,10 +247,8 @@ def avaliar_viabilidade(req: ConsultaRequest):
 # Endpoint POST para validar acesso do ambulante sem senha
 @app.post("/api/carteira/acesso")
 def acessar_carteira(req: AcessoCarteiraRequest, db: Session = Depends(get_db)):
-    # Normalizar o CPF para conter apenas dígitos
     cpf_limpo = "".join(filter(str.isdigit, req.cpf))
     
-    # Buscar no banco
     ambulante = db.query(models.Ambulante).filter(
         models.Ambulante.cpf == cpf_limpo,
         models.Ambulante.data_nascimento == req.data_nascimento
@@ -258,7 +260,6 @@ def acessar_carteira(req: AcessoCarteiraRequest, db: Session = Depends(get_db)):
             detail="Ambulante não localizado. Verifique se o CPF e a Data de Nascimento foram digitados corretamente."
         )
         
-    # Gerar o payload assinado do QR Code contendo as informações da licença
     payload_qr = {
         "numero_autorizacao": ambulante.numero_autorizacao,
         "titular": ambulante.nome,
@@ -358,6 +359,59 @@ def obter_carteira_digital(cpf_ou_protocolo: str, db: Session = Depends(get_db))
         "secretario": ambulante.secretario,
         "prefeito": ambulante.prefeito,
         "qr_token": token_assinado
+    }
+
+# Endpoint POST para Login de Fiscal de Posturas
+@app.post("/api/fiscal/login")
+def fiscal_login(req: FiscalLoginRequest):
+    if req.usuario == "fiscal" and req.senha == "sorocaba2026":
+        return {
+            "status": "sucesso",
+            "token": "SOROCABA_FISCAL_SECURE_TOKEN_2026",
+            "fiscal_nome": "Carlos Eduardo"
+        }
+    raise HTTPException(status_code=401, detail="Usuário ou senha inválidos.")
+
+# Endpoint GET para busca de permissionários cadastrados no SQLite
+@app.get("/api/fiscal/busca")
+def fiscal_busca(query: str = "", db: Session = Depends(get_db)):
+    query_limpa = "".join(filter(str.isdigit, query))
+    
+    if query_limpa:
+        # Se contiver números, busca por CPF ou número de Autorização (TAU)
+        resultados = db.query(models.Ambulante).filter(
+            (models.Ambulante.cpf.like(f"%{query_limpa}%")) |
+            (models.Ambulante.numero_autorizacao.like(f"%{query}%"))
+        ).all()
+    else:
+        # Senão, busca por correspondência aproximada no Nome
+        resultados = db.query(models.Ambulante).filter(
+            models.Ambulante.nome.like(f"%{query}%")
+        ).all()
+        
+    return {
+        "resultados": [
+            {
+                "id": a.id,
+                "nome": a.nome,
+                "cpf": a.cpf,
+                "cnpj": a.cnpj,
+                "numero_autorizacao": a.numero_autorizacao,
+                "local_autorizado": a.local_autorizado,
+                "categoria": a.categoria,
+                "produtos": a.produtos,
+                "observacao_produtos": a.observacao_produtos,
+                "dias_autorizados": a.dias_autorizados,
+                "horario": a.horario,
+                "inicio": a.inicio,
+                "termino": a.termino,
+                "processo_administrativo": a.processo_administrativo,
+                "status": a.status,
+                "secretario": a.secretario,
+                "prefeito": a.prefeito
+            }
+            for a in resultados
+        ]
     }
 
 # Validação do Token do QR Code do Permissionário
