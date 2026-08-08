@@ -17,107 +17,114 @@ document.addEventListener('DOMContentLoaded', () => {
   const modal = document.getElementById('modal-licenca');
   const btnFecharModal = document.getElementById('btn-fechar-modal');
 
-  // Verificar se o fiscal já está logado
+  // Verificar se o fiscal já está logado ao carregar a página
   const fiscalToken = sessionStorage.getItem('fiscal_token');
   if (fiscalToken) {
     exibirPainelFiscal();
   }
 
   // Evento de Login do Fiscal
-  formLogin.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    loginError.style.display = 'none';
+  if (formLogin) {
+    formLogin.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      loginError.style.display = 'none';
 
-    try {
-      const response = await fetch('http://localhost:8000/api/fiscal/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario: userInput.value, senha: passInput.value })
-      });
+      try {
+        const response = await fetch('http://localhost:8000/api/fiscal/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuario: userInput.value, senha: passInput.value })
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.detail || 'Erro ao realizar login.');
+        if (!response.ok) {
+          throw new Error(data.detail || 'Erro ao realizar login.');
+        }
+
+        sessionStorage.setItem('fiscal_token', data.token);
+        sessionStorage.setItem('fiscal_nome', data.fiscal_nome);
+        
+        exibirPainelFiscal();
+
+      } catch (err) {
+        loginError.innerText = err.message;
+        loginError.style.display = 'block';
       }
-
-      sessionStorage.setItem('fiscal_token', data.token);
-      sessionStorage.setItem('fiscal_nome', data.fiscal_nome);
-      
-      exibirPainelFiscal();
-
-    } catch (err) {
-      loginError.innerText = err.message;
-      loginError.style.display = 'block';
-    }
-  });
+    });
+  }
 
   // Evento de Logout do Fiscal
-  btnLogoutFiscal.addEventListener('click', () => {
-    sessionStorage.removeItem('fiscal_token');
-    sessionStorage.removeItem('fiscal_nome');
-    
-    fiscalPanel.style.display = 'none';
-    btnLogoutFiscal.style.display = 'none';
-    loginContainer.style.display = 'block';
+  if (btnLogoutFiscal) {
+    btnLogoutFiscal.addEventListener('click', () => {
+      sessionStorage.removeItem('fiscal_token');
+      sessionStorage.removeItem('fiscal_nome');
+      
+      fiscalPanel.style.display = 'none';
+      btnLogoutFiscal.style.display = 'none';
+      loginContainer.style.display = 'block';
 
-    userInput.value = '';
-    passInput.value = '';
-  });
+      if (userInput) userInput.value = '';
+      if (passInput) passInput.value = '';
+    });
+  }
 
   function exibirPainelFiscal() {
-    loginContainer.style.display = 'none';
-    fiscalPanel.style.display = 'block';
-    btnLogoutFiscal.style.display = 'block';
+    if (loginContainer) loginContainer.style.display = 'none';
+    if (fiscalPanel) fiscalPanel.style.display = 'block';
+    if (btnLogoutFiscal) btnLogoutFiscal.style.display = 'block';
     
-    // Inicia câmera para scan de QR Code
+    // Inicia câmera para scan de QR Code de forma segura
     iniciarLeitorQRCode();
   }
 
   // Lógica de Busca de Permissionários
-  formBusca.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const query = buscaInput.value.trim();
-    if (!query) return;
+  if (formBusca) {
+    formBusca.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const query = buscaInput.value.trim();
+      if (!query) return;
 
-    try {
-      const response = await fetch(`http://localhost:8000/api/fiscal/busca?query=${encodeURIComponent(query)}`);
-      const data = await response.json();
+      try {
+        const response = await fetch(`http://localhost:8000/api/fiscal/busca?query=${encodeURIComponent(query)}`);
+        const data = await response.json();
 
-      resultadosContainer.innerHTML = '';
-      
-      if (data.resultados && data.resultados.length > 0) {
-        data.resultados.forEach(item => {
-          const div = document.createElement('div');
-          div.className = 'search-item';
-          div.innerHTML = `
-            <div>
-              <strong>${item.nome}</strong>
-              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
-                CPF: ${item.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")} | TAU: ${item.numero_autorizacao}
+        resultadosContainer.innerHTML = '';
+        
+        if (data.resultados && data.resultados.length > 0) {
+          data.resultados.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'search-item';
+            div.innerHTML = `
+              <div>
+                <strong>${item.nome}</strong>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
+                  CPF: ${item.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")} | TAU: ${item.numero_autorizacao}
+                </div>
               </div>
-            </div>
-            <span class="badge ${item.status.toLowerCase() === 'ativo' ? 'badge-apto' : 'badge-inapto'}" style="font-size:0.7rem; padding: 2px 6px;">
-              ${item.status}
-            </span>
-          `;
-          // Abre modal ao clicar no ambulante encontrado
-          div.addEventListener('click', () => abrirModalDetalhes(item));
-          resultadosContainer.appendChild(div);
-        });
-        resultadosContainer.style.display = 'flex';
-      } else {
-        resultadosContainer.innerHTML = '<div style="font-size:0.85rem; color:var(--text-muted); padding:10px; text-align:center;">Nenhum permissionário encontrado com o termo digitado.</div>';
-        resultadosContainer.style.display = 'block';
-      }
+              <span class="badge ${item.status.toLowerCase() === 'ativo' ? 'badge-apto' : 'badge-inapto'}" style="font-size:0.7rem; padding: 2px 6px;">
+                ${item.status}
+              </span>
+            `;
+            // Abre modal ao clicar no ambulante encontrado
+            div.addEventListener('click', () => abrirModalDetalhes(item));
+            resultadosContainer.appendChild(div);
+          });
+          resultadosContainer.style.display = 'flex';
+        } else {
+          resultadosContainer.innerHTML = '<div style="font-size:0.85rem; color:var(--text-muted); padding:10px; text-align:center;">Nenhum permissionário encontrado com o termo digitado.</div>';
+          resultadosContainer.style.display = 'block';
+        }
 
-    } catch (err) {
-      alert('Erro ao buscar permissionários.');
-    }
-  });
+      } catch (err) {
+        alert('Erro ao buscar permissionários.');
+      }
+    });
+  }
 
   // Abrir Modal de Visualização da Licença
   async function abrirModalDetalhes(item) {
+    if (!modal) return;
     modal.classList.add('active');
 
     // Preenche campos do modal
@@ -183,9 +190,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Fechar o Modal
-  btnFecharModal.addEventListener('click', () => {
-    modal.classList.remove('active');
-  });
+  if (btnFecharModal) {
+    btnFecharModal.addEventListener('click', () => {
+      modal.classList.remove('active');
+    });
+  }
 
   // Fechar modal ao clicar fora
   window.addEventListener('click', (e) => {
@@ -194,25 +203,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Inicializa a Câmera e Leitor de QR Code (Função Original Mantida)
+  // Inicializa a Câmera de forma resiliente a erros
   function iniciarLeitorQRCode() {
-    const html5QrCode = new Html5Qrcode("reader");
-    const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+    try {
+      // Evita falhar se a biblioteca CDN de QrCode falhar em carregar
+      if (typeof Html5Qrcode === 'undefined') {
+        throw new Error("Biblioteca de câmera Html5Qrcode não carregada ou offline.");
+      }
+      
+      const html5QrCode = new Html5Qrcode("reader");
+      const config = { fps: 10, qrbox: { width: 220, height: 220 } };
 
-    html5QrCode.start(
-      { facingMode: "environment" },
-      config,
-      onScanSuccess,
-      onScanFailure
-    ).catch(err => {
-      console.warn("Câmera indisponível no dispositivo atual.", err);
-      document.getElementById('reader').innerHTML = `
+      html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        onScanSuccess,
+        onScanFailure
+      ).catch(err => {
+        console.warn("Câmera indisponível no dispositivo atual.", err);
+        exibirMensagemSemCamera();
+      });
+    } catch (err) {
+      console.warn("Erro ao iniciar QR Code Reader:", err);
+      exibirMensagemSemCamera();
+    }
+  }
+
+  function exibirMensagemSemCamera() {
+    const readerDiv = document.getElementById('reader');
+    if (readerDiv) {
+      readerDiv.innerHTML = `
         <div style="padding:1.5rem; text-align:center; color:var(--text-muted); font-size:0.85rem; display:flex; align-items:center; justify-content:center; gap:8px;">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-camera-off"><line x1="2" y1="2" x2="22" y2="22"></line><path d="M7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3"></path><path d="M9.5 4h5L17 7h3a2 2 0 0 1 2 2v3.5"></path><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path></svg>
-          Scanner pronto (Câmera simulada ou aguardando dispositivo móvel).
+          Scanner pronto (Câmera suspensa ou aguardando dispositivo móvel).
         </div>
       `;
-    });
+    }
   }
 
   // Callback executado quando o QR Code é lido com sucesso (Original Mantido)
@@ -221,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const resTitle = document.getElementById('qr-result-title');
     const resDesc = document.getElementById('qr-result-desc');
 
-    resBox.style.display = 'block';
+    if (resBox) resBox.style.display = 'block';
 
     try {
       const response = await fetch('http://localhost:8000/api/fiscal/validar-qr', {
@@ -244,44 +270,48 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error(data.detail || "Licença inválida");
       }
     } catch (err) {
-      resBox.className = 'result-box result-error';
-      resTitle.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
-        <span>QR CODE INVÁLIDO OU ADULTERADO!</span>
-      `;
-      resDesc.innerText = err.message;
+      if (resBox) {
+        resBox.className = 'result-box result-error';
+        resTitle.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+          <span>QR CODE INVÁLIDO OU ADULTERADO!</span>
+        `;
+        resDesc.innerText = err.message;
+      }
     }
   }
 
   function onScanFailure(error) {}
 
   // Envio de Vistoria de Calçada (Original Mantido)
-  document.getElementById('form-vistoria').addEventListener('submit', async (e) => {
-    e.preventDefault();
+  const formVistoria = document.getElementById('form-vistoria');
+  if (formVistoria) {
+    formVistoria.addEventListener('submit', async (e) => {
+      e.preventDefault();
 
-    const payload = {
-      protocolo: document.getElementById('f-protocolo').value,
-      fiscal_nome: document.getElementById('f-fiscal').value,
-      largura_calcada: parseFloat(document.getElementById('f-calcada').value),
-      faixa_livre_ok: document.getElementById('f-faixa-livre').checked,
-      equipamento_ok: document.getElementById('f-equipamento').checked,
-      observacoes: document.getElementById('f-obs').value
-    };
+      const payload = {
+        protocolo: document.getElementById('f-protocolo').value,
+        fiscal_nome: document.getElementById('f-fiscal').value,
+        largura_calcada: parseFloat(document.getElementById('f-calcada').value),
+        faixa_livre_ok: document.getElementById('f-faixa-livre').checked,
+        equipamento_ok: document.getElementById('f-equipamento').checked,
+        observacoes: document.getElementById('f-obs').value
+      };
 
-    try {
-      const response = await fetch('http://localhost:8000/api/fiscal/vistoria', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      try {
+        const response = await fetch('http://localhost:8000/api/fiscal/vistoria', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
 
-      const res = await response.json();
-      alert(res.mensagem);
-      document.getElementById('form-vistoria').reset();
-      // Restaura nome do fiscal fixado
-      document.getElementById('f-fiscal').value = "Fiscal Carlos Eduardo";
-    } catch (err) {
-      alert("Vistoria salva localmente no dispositivo (Modo Offline). Será sincronizada ao conectar.");
-    }
-  });
+        const res = await response.json();
+        alert(res.mensagem);
+        formVistoria.reset();
+        document.getElementById('f-fiscal').value = "Fiscal Carlos Eduardo";
+      } catch (err) {
+        alert("Vistoria salva localmente no dispositivo (Modo Offline). Será sincronizada ao conectar.");
+      }
+    });
+  }
 });
