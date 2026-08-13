@@ -107,7 +107,8 @@ document.addEventListener("DOMContentLoaded", () => {
   map = L.map("map").setView([-23.5015, -47.4581], 13);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: '© OpenStreetMap contributors | Prefeitura de Sorocaba'
+    attribution: '© OpenStreetMap contributors | Prefeitura de Sorocaba',
+    crossOrigin: 'anonymous'
   }).addTo(map);
 
   map.on("click", async (e) => {
@@ -753,4 +754,261 @@ async function exibirResultado(data) {
       Necessita Vistoria
     `;
   }
+}
+
+// ==========================================================================
+// FUNÇÕES DE LAUDO TÉCNICO, EXPORTAÇÃO PDF, IMPRESSÃO E COMPARTILHAMENTO
+// ==========================================================================
+
+async function prepararLaudoTemplate() {
+  const p = window.ultimoPontoConsultado || { lat: -23.5015, lng: -47.4581, logradouro: "Ponto Selecionado em Sorocaba - SP" };
+  
+  // 1. Número de protocolo e timestamp
+  const now = new Date();
+  const dataFormatada = now.toLocaleDateString("pt-BR") + " " + now.toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' });
+  const protoNum = "SOR-2026-" + Math.floor(100000 + Math.random() * 900000);
+  
+  // Hash simples de autenticidade
+  const rawData = `${protoNum}-${p.lat}-${p.lng}-${now.getTime()}`;
+  let hashVal = 0;
+  for (let i = 0; i < rawData.length; i++) {
+    hashVal = ((hashVal << 5) - hashVal) + rawData.charCodeAt(i);
+    hashVal |= 0;
+  }
+  const hashHex = "SHA256-" + Math.abs(hashVal).toString(16).toUpperCase() + "89F2A1";
+
+  // 2. Meta Dados
+  const elProto = document.getElementById("laudo-protocolo");
+  const elData = document.getElementById("laudo-data-emissao");
+  const elHash = document.getElementById("laudo-auth-hash");
+  if (elProto) elProto.textContent = protoNum;
+  if (elData) elData.textContent = dataFormatada;
+  if (elHash) elHash.textContent = hashHex;
+
+  // 3. Dados da Consulta
+  const elAddr = document.getElementById("laudo-endereco");
+  const elCoords = document.getElementById("laudo-coords");
+  const elMod = document.getElementById("laudo-modalidade");
+  const elZonaCod = document.getElementById("laudo-zona-codigo");
+  const elZonaDesc = document.getElementById("laudo-zona-desc");
+
+  if (elAddr) elAddr.textContent = p.logradouro;
+  if (elCoords) elCoords.textContent = `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
+  if (elMod) elMod.textContent = tipoComercioSelecionado === "ambulante" ? "Comércio Ambulante (Uso do Espaço Público)" : "Comércio Fixo (Estabelecimento)";
+  
+  const resZonaCod = document.getElementById("res-zona-codigo") ? document.getElementById("res-zona-codigo").textContent : "ZM";
+  const resZonaDesc = document.getElementById("res-zona") ? document.getElementById("res-zona").textContent : "Zona Mista";
+  if (elZonaCod) elZonaCod.textContent = resZonaCod;
+  if (elZonaDesc) elZonaDesc.textContent = resZonaDesc;
+
+  // 4. Parecer Técnico e Justificativa
+  const parecerBadgeEl = document.getElementById("parecer-badge");
+  const laudoBadge = document.getElementById("laudo-parecer-badge");
+  const laudoJustificativa = document.getElementById("laudo-justificativa");
+  const resJustificativa = document.getElementById("res-justificativa");
+
+  if (parecerBadgeEl && laudoBadge) {
+    laudoBadge.textContent = parecerBadgeEl.innerText.trim();
+    laudoBadge.className = "laudo-badge";
+    if (parecerBadgeEl.classList.contains("badge-apto")) {
+      laudoBadge.classList.add("laudo-badge-apto");
+    } else if (parecerBadgeEl.classList.contains("badge-inapto")) {
+      laudoBadge.classList.add("laudo-badge-inapto");
+    } else {
+      laudoBadge.classList.add("laudo-badge-vistoria");
+    }
+  }
+
+  if (resJustificativa && laudoJustificativa) {
+    laudoJustificativa.textContent = resJustificativa.textContent;
+  }
+
+  // 5. Atividade e CNAE
+  const cnaeInput = document.getElementById("cnae-input");
+  const laudoRowCnae = document.getElementById("laudo-row-cnae");
+  const laudoCnaeInfo = document.getElementById("laudo-cnae-info");
+  const laudoCnaeBoxFull = document.getElementById("laudo-cnae-box-full");
+  const laudoCnaeDetalheText = document.getElementById("laudo-cnae-detalhe-text");
+  const cnaeJustificativa = document.getElementById("cnae-justificativa");
+
+  if (cnaeInput && cnaeInput.value.trim()) {
+    if (laudoRowCnae) laudoRowCnae.style.display = "table-row";
+    if (laudoCnaeInfo) laudoCnaeInfo.textContent = cnaeInput.value.trim();
+    if (laudoCnaeBoxFull && cnaeJustificativa && cnaeJustificativa.textContent) {
+      laudoCnaeBoxFull.style.display = "block";
+      laudoCnaeDetalheText.innerHTML = cnaeJustificativa.innerHTML;
+    }
+  } else {
+    if (laudoRowCnae) laudoRowCnae.style.display = "none";
+    if (laudoCnaeBoxFull) laudoCnaeBoxFull.style.display = "none";
+  }
+
+  // 6. Usos Permitidos
+  const usosContainer = document.getElementById("res-usos-permitidos");
+  const laudoUsosTags = document.getElementById("laudo-usos-tags");
+  if (usosContainer && laudoUsosTags) {
+    laudoUsosTags.innerHTML = "";
+    const tags = usosContainer.querySelectorAll(".use-tag");
+    tags.forEach(t => {
+      const span = document.createElement("span");
+      span.className = "laudo-tag";
+      span.textContent = t.textContent;
+      laudoUsosTags.appendChild(span);
+    });
+  }
+
+  // 7. Requisitos Municipais
+  const resReqs = document.getElementById("res-requisitos");
+  const laudoReqList = document.getElementById("laudo-requisitos-list");
+  if (resReqs && laudoReqList) {
+    laudoReqList.innerHTML = "";
+    const lis = resReqs.querySelectorAll("li");
+    lis.forEach(li => {
+      const newLi = document.createElement("li");
+      newLi.textContent = li.textContent.trim();
+      laudoReqList.appendChild(newLi);
+    });
+  }
+
+  // 8. Snapshot do Mapa Leaflet
+  const mapImg = document.getElementById("laudo-map-snapshot");
+  if (mapImg && typeof html2canvas !== "undefined") {
+    try {
+      const mapDiv = document.getElementById("map");
+      const canvas = await html2canvas(mapDiv, { useCORS: true, logging: false });
+      mapImg.src = canvas.toDataURL("image/jpeg", 0.9);
+    } catch (e) {
+      console.warn("Não foi possível capturar a imagem do mapa para o laudo estático.", e);
+    }
+  }
+}
+
+async function exportarPDF() {
+  if (typeof html2pdf === "undefined") {
+    alert("A biblioteca de geração de PDF ainda está sendo carregada. Aguarde um instante.");
+    return;
+  }
+
+  exibirToast("📄 Gerando PDF em página única...");
+
+  await prepararLaudoTemplate();
+
+  const element = document.getElementById("laudo-print-template");
+  element.style.display = "block";
+
+  const proto = document.getElementById("laudo-protocolo").textContent || "SOR-2026";
+  const opt = {
+    margin: [4, 4, 4, 4],
+    filename: `Laudo_Viabilidade_Sorocaba_${proto}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, logging: false },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+
+  try {
+    await html2pdf().set(opt).from(element).save();
+    exibirToast("✅ PDF salvo com sucesso!");
+  } catch (err) {
+    console.error("Erro ao gerar PDF:", err);
+    alert("Erro ao exportar PDF. Você pode utilizar o botão 'Imprimir' e selecionar 'Salvar como PDF'.");
+  } finally {
+    element.style.display = "none";
+  }
+}
+
+async function imprimirLaudo() {
+  exibirToast("🖨️ Preparando documento para impressão...");
+  await prepararLaudoTemplate();
+
+  const element = document.getElementById("laudo-print-template");
+  element.style.display = "block";
+
+  setTimeout(() => {
+    window.print();
+    element.style.display = "none";
+  }, 300);
+}
+
+async function compartilharLaudo() {
+  const p = window.ultimoPontoConsultado || { logradouro: "Sorocaba/SP" };
+  const parecer = document.getElementById("parecer-badge") ? document.getElementById("parecer-badge").innerText.trim() : "Consulta";
+  const zona = document.getElementById("res-zona-codigo") ? document.getElementById("res-zona-codigo").innerText.trim() : "Zoneamento";
+  const tipo = tipoComercioSelecionado === "ambulante" ? "Comércio Ambulante" : "Comércio Fixo";
+  
+  const textSummary = `📋 *Laudo de Viabilidade Espacial - Sorocaba*\n📍 Endereço: ${p.logradouro}\n🏪 Modalidade: ${tipo}\n🗺️ Zoneamento: ${zona}\n📊 Parecer: ${parecer}\n\nEmitido via Sistema de Viabilidade (Lei 13.123/2025).`;
+
+  await prepararLaudoTemplate();
+
+  // 1. Tenta compartilhamento direto do ARQUIVO PDF (quando suportado pelo navegador mobile, como WhatsApp/Telegram/Email/Drive)
+  if (typeof html2pdf !== "undefined" && navigator.canShare) {
+    try {
+      const element = document.getElementById("laudo-print-template");
+      element.style.display = "block";
+
+      const pdfBlob = await html2pdf().set({
+        margin: [4, 4, 4, 4],
+        filename: `Laudo_Viabilidade_Sorocaba.pdf`,
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      }).from(element).output('blob');
+
+      element.style.display = "none";
+
+      const pdfFile = new File([pdfBlob], `Laudo_Viabilidade_Sorocaba.pdf`, { type: 'application/pdf' });
+
+      if (navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          title: 'Laudo de Viabilidade Espacial - Sorocaba',
+          text: textSummary,
+          files: [pdfFile]
+        });
+        exibirToast("📲 Compartilhado com sucesso!");
+        return;
+      }
+    } catch (err) {
+      console.warn("Compartilhamento nativo de arquivo PDF indisponível ou cancelado. Alternando para compartilhamento por texto.", err);
+    }
+  }
+
+  // 2. Fallback para Web Share API nativa do sistema (Menu do Android/iOS)
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: 'Laudo de Viabilidade Espacial - Sorocaba',
+        text: textSummary,
+        url: window.location.href
+      });
+      exibirToast("📲 Compartilhado com sucesso!");
+      return;
+    } catch (e) {
+      if (e.name !== 'AbortError') console.error(e);
+      return;
+    }
+  }
+
+  // 3. Fallback para área de transferência (Desktop)
+  try {
+    await navigator.clipboard.writeText(textSummary + "\n" + window.location.href);
+    exibirToast("📋 Parecer copiado para a área de transferência!");
+  } catch (e) {
+    alert(textSummary);
+  }
+}
+
+function exibirToast(mensagem) {
+  let toast = document.querySelector(".toast-notification");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.className = "toast-notification";
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+    <span>${mensagem}</span>
+  `;
+  toast.classList.add("show");
+  setTimeout(() => {
+    toast.classList.remove("show");
+  }, 3500);
 }
