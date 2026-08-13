@@ -25,6 +25,7 @@ app.add_middleware(
 
 SECRET_KEY_SEMEPP = "sorocaba_secret_key_2025_lei_13123"
 GEOJSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "sorocaba_zoneamento.geojson")
+CORREDORES_GEOJSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "sorocaba_corredores.geojson")
 
 # Carregamento da Base Espacial do Plano Diretor em Memória
 camada_zoneamento = []
@@ -38,7 +39,27 @@ if os.path.exists(GEOJSON_PATH):
                 camada_zoneamento.append({"geometria": geom, "propriedades": props})
         print(f"✅ Carregados {len(camada_zoneamento)} polígonos de zoneamento de Sorocaba.")
     except Exception as e:
-        print(f"⚠️ Erro ao carregar GeoJSON: {e}")
+        print(f"⚠️ Erro ao carregar GeoJSON de zoneamento: {e}")
+
+camada_corredores = []
+if os.path.exists(CORREDORES_GEOJSON_PATH):
+    try:
+        with open(CORREDORES_GEOJSON_PATH, "r", encoding="utf-8") as f:
+            corredores_data = json.load(f)
+            for feature in corredores_data.get("features", []):
+                line_geom = shape(feature["geometry"])
+                props = feature.get("properties", {})
+                # Buffer de ~150 metros (0.00135 graus em WGS84) ao redor do eixo do corredor
+                buffer_geom = line_geom.buffer(0.00135)
+                camada_corredores.append({
+                    "geometria_linha": line_geom,
+                    "geometria_buffer": buffer_geom,
+                    "sigla": props.get("sigla", "CCS2"),
+                    "nome": props.get("nome", "Corredor Comercial e de Serviços")
+                })
+        print(f"✅ Carregados {len(camada_corredores)} eixos viários oficiais de corredores de Sorocaba.")
+    except Exception as e:
+        print(f"⚠️ Erro ao carregar GeoJSON de corredores: {e}")
 
 # Injeção Automática de Dados Iniciais no SQLite para Testes (Seeding)
 @app.on_event("startup")
@@ -301,7 +322,8 @@ MAPA_CORREDORES_VIARIOS = {
     "comendador oetterer": ("CCS1", "CCS1 - Corredor Comercial e de Serviços 1 (Rua Comendador Oetterer)"),
     "barão de tatuí": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. Barão de Tatuí)"),
     "barao de tatui": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. Barão de Tatuí)"),
-    "washington luiz": ("CCS1", "CCS1 - Corredor Comercial e de Serviços 1 (Av. Washington Luiz)")
+    "washington luiz": ("CCS1", "CCS1 - Corredor Comercial e de Serviços 1 (Av. Washington Luiz)"),
+    "dorothy de oliveira": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Rua Dorothy de Oliveira)")
 }
 
 def obter_nome_oficial_zona(zona_str: str) -> str:
@@ -329,18 +351,27 @@ def obter_nome_oficial_zona(zona_str: str) -> str:
 # Endpoint de Viabilidade Espacial Cruzando Plano Diretor + Leis Municipais
 @app.post("/api/viabilidade")
 def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
+    ponto = Point(req.longitude, req.latitude)
     zona_encontrada = None
-    logr_clean = req.logradouro.lower()
 
-    # 1. Verifica se o logradouro consultado é um Corredor Comercial ou de Serviços (Lei 13.123/2025)
-    for rua_chave, (sigla_c, nome_c) in MAPA_CORREDORES_VIARIOS.items():
-        if rua_chave in logr_clean:
-            zona_encontrada = nome_c
+    # 1. Verifica se a coordenada está sobre a faixa de algum dos 334 Corredores Oficiais do mapa da Prefeitura
+    for item in camada_corredores:
+        if item["geometria_buffer"].contains(ponto) or item["geometria_linha"].distance(ponto) < 0.00135:
+            sigla = item["sigla"]
+            nome_oficial = obter_nome_oficial_zona(sigla)
+            zona_encontrada = f"{sigla} - {nome_oficial}"
             break
 
-    # 2. Se não for corredor cadastrado, realiza o cruzamento por coordenadas com os polígonos do QGIS
+    # 2. Se não estiver no buffer espacial, verifica se o nome da rua informada está no dicionário de corredores
     if not zona_encontrada:
-        ponto = Point(req.longitude, req.latitude)
+        logr_rua = req.logradouro.lower().split(",")[0].split("-")[0].strip()
+        for rua_chave, (sigla_c, nome_c) in MAPA_CORREDORES_VIARIOS.items():
+            if rua_chave in logr_rua:
+                zona_encontrada = nome_c
+                break
+
+    # 3. Se não for corredor, realiza o cruzamento por coordenadas com os polígonos do QGIS
+    if not zona_encontrada:
         for item in camada_zoneamento:
             if item["geometria"].contains(ponto):
                 props = item["propriedades"]
