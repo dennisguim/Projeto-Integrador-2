@@ -71,8 +71,12 @@
       <div id="result-card" class="glass-card hidden">
         <h3>Parecer de Viabilidade</h3>
         <div id="parecer-badge" class="badge"></div>
-        <p style="margin-top: 10px;"><strong>Modalidade:</strong> <span id="res-tipo"></span></p>
-        <p><strong>Zonamento Código:</strong> <span id="res-zona-codigo" class="zone-code-tag"></span></p>
+        
+        <p style="margin-top: 10px;"><strong>Código da Consulta:</strong> <span id="res-codigo-consulta" class="zone-code-tag" style="background:rgba(217,119,6,0.12); border-color:rgba(217,119,6,0.3); color:var(--primary-gold); font-family:monospace; letter-spacing:0.5px;"></span></p>
+        <p><strong>Endereço Consultado:</strong> <span id="res-endereco-logradouro"></span></p>
+        <p><strong>Modalidade:</strong> <span id="res-tipo"></span></p>
+        <p id="res-cnae-row" class="hidden"><strong>Atividade / CNAE Consultado:</strong> <span id="res-cnae-codigo" class="zone-code-tag" style="background:rgba(59,130,246,0.12); border-color:rgba(59,130,246,0.3); color:#3b82f6; font-weight:600;"></span></p>
+        <p><strong>Zoneamento Código:</strong> <span id="res-zona-codigo" class="zone-code-tag"></span></p>
         <p><strong>Descrição da Zona (Lei 13.123/2025):</strong> <span id="res-zona"></span></p>
         
         <!-- Bloco de Categorias de Uso Gerais Permitidas -->
@@ -89,16 +93,28 @@
         <p style="margin-top: 10px;"><strong>Justificativa Legal:</strong></p>
         <p id="res-justificativa" class="justificativa-text"></p>
         
-        <!-- Barra de Ações: Salvar PDF, Imprimir, Compartilhar -->
+        <div id="req-container" style="margin-top: 12px; text-align: left;">
+          <strong style="font-size: 0.9rem; color: var(--primary-gold); display: flex; align-items: center; gap: 6px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-clipboard-list"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M12 11h4"></path><path d="M12 16h4"></path><path d="M8 11h.01"></path><path d="M8 16h.01"></path></svg>
+            Condições e Requisitos Municipais:
+          </strong>
+          <ul id="res-requisitos" style="margin-top: 8px; padding-left: 20px; font-size: 0.85rem; line-height: 1.4; color: var(--text-muted);"></ul>
+        </div>
+
+        <!-- Rodapé para Impressão e Salvar PDF -->
+        <div class="print-only-footer">
+          <div class="print-meta-row">
+            <span><strong>Código da Consulta:</strong> <span id="print-protocolo">CNS-20260813-0000</span></span>
+            <span><strong>Data de Emissão:</strong> <span id="print-data">--/--/---- --:--</span></span>
+          </div>
+          <p class="print-disclaimer">Prefeitura Municipal de Sorocaba • Simples Consulta de Viabilidade Espacial (Lei 13.123/2025)</p>
+        </div>
+
+        <!-- Barra de Ações: Salvar / Imprimir PDF e Compartilhar -->
         <div class="result-actions-bar">
-          <button id="btn-export-pdf" class="btn-action btn-pdf" onclick="exportarPDF()">
+          <button id="btn-print-doc" class="btn-action btn-pdf" onclick="salvarOuImprimirPDF()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg>
-            Salvar PDF
-          </button>
-          
-          <button id="btn-print-doc" class="btn-action btn-print" onclick="imprimirLaudo()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-printer"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect width="12" height="8" x="6" y="14"></rect></svg>
-            Imprimir
+            Salvar / Imprimir PDF
           </button>
 
           <button id="btn-share-doc" class="btn-action btn-share" onclick="compartilharLaudo()">
@@ -110,97 +126,7 @@
     </main>
   </div>
 
-  <!-- Template Oculto para Geração do Laudo Técnico em PDF / Impressão (Página Única A4) -->
-  <div id="laudo-print-template" class="laudo-pdf-container">
-    <div class="laudo-header">
-      <img src="img/logo-sorocaba.png" alt="Prefeitura de Sorocaba" class="laudo-logo" />
-      <div class="laudo-header-titles">
-        <h2>PREFEITURA MUNICIPAL DE SOROCABA</h2>
-        <h3>Secretaria Municipal de Desenvolvimento Econômico, Trabalho e Turismo - SEMEPP</h3>
-        <h4>LAUDO TÉCNICO DE VIABILIDADE ESPACIAL E ZONEAMENTO</h4>
-      </div>
-    </div>
-
-    <div class="laudo-meta-bar">
-      <span><strong>Protocolo nº:</strong> <span id="laudo-protocolo">SOR-2026-00000</span></span>
-      <span><strong>Emissão:</strong> <span id="laudo-data-emissao">--/--/---- --:--</span></span>
-      <span><strong>Base Legal:</strong> Lei 13.123/2025 & Decreto 30.529/2025</span>
-    </div>
-
-    <div class="laudo-body-grid">
-      <div class="laudo-col-main">
-        <div class="laudo-box">
-          <h5 class="laudo-box-title">1. DADOS DA CONSULTA DE LOCALIZAÇÃO</h5>
-          <table class="laudo-table">
-            <tr>
-              <th>Endereço:</th>
-              <td id="laudo-endereco">---</td>
-            </tr>
-            <tr>
-              <th>Coordenadas:</th>
-              <td id="laudo-coords">---</td>
-            </tr>
-            <tr>
-              <th>Modalidade:</th>
-              <td id="laudo-modalidade">---</td>
-            </tr>
-            <tr>
-              <th>Zoneamento:</th>
-              <td><strong id="laudo-zona-codigo">---</strong> - <span id="laudo-zona-desc">---</span></td>
-            </tr>
-            <tr id="laudo-row-cnae" style="display:none;">
-              <th>Atividade/CNAE:</th>
-              <td id="laudo-cnae-info">---</td>
-            </tr>
-          </table>
-        </div>
-
-        <div class="laudo-box">
-          <h5 class="laudo-box-title">2. PARECER TÉCNICO DE VIABILIDADE</h5>
-          <div class="laudo-parecer-wrapper">
-            <div id="laudo-parecer-badge" class="laudo-badge">---</div>
-            <p id="laudo-justificativa" class="laudo-text">---</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="laudo-col-side">
-        <div class="laudo-box laudo-box-map">
-          <h5 class="laudo-box-title">3. MAPA URBANÍSTICO</h5>
-          <div class="laudo-map-frame">
-            <img id="laudo-map-snapshot" src="" alt="Mapa da Consulta" />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="laudo-box laudo-box-full">
-      <h5 class="laudo-box-title">4. CATEGORIAS DE USO PERMITIDAS NA ZONA</h5>
-      <div id="laudo-usos-tags" class="laudo-tags-container"></div>
-    </div>
-
-    <div id="laudo-cnae-box-full" class="laudo-box laudo-box-full" style="display:none;">
-      <h5 class="laudo-box-title">5. ANÁLISE DE ENQUADRAMENTO DA ATIVIDADE (CNAE)</h5>
-      <p id="laudo-cnae-detalhe-text" class="laudo-text"></p>
-    </div>
-
-    <div class="laudo-box laudo-box-full">
-      <h5 class="laudo-box-title">6. CONDIÇÕES E REQUISITOS MUNICIPAIS</h5>
-      <ul id="laudo-requisitos-list" class="laudo-req-list"></ul>
-    </div>
-
-    <div class="laudo-footer">
-      <div class="laudo-footer-text">
-        <p>Documento oficial emitido eletronicamente pelo Sistema de Viabilidade Espacial de Sorocaba.</p>
-        <p>Simples Consulta - Validação nos termos da Lei Municipal nº 13.123/2025.</p>
-      </div>
-      <div class="laudo-auth-code">
-        <strong>Hash de Autenticidade:</strong><br><span id="laudo-auth-hash">---</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Leaflet JS & PDF Libs & Bancos Locais -->
+  <!-- Leaflet JS & PDF Engine & Bancos Locais -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="js/app.js"></script>

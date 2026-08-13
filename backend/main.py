@@ -237,6 +237,7 @@ class ConsultaRequest(BaseModel):
     longitude: float
     logradouro: str
     tipo_comercio: str = "ambulante"
+    cnae: str = ""
 
 class ValidarQRRequest(BaseModel):
     token: str
@@ -264,19 +265,65 @@ def read_root():
 
 @app.get("/status")
 def status_check():
-    return {"status": "ok", "versao": "1.3.0", "poligonos_carregados": len(camada_zoneamento)}
+    return {"status": "ok", "versao": "1.4.0", "poligonos_carregados": len(camada_zoneamento)}
+
+# Helper para gerar código da consulta (mashup do dia/hora + sequencial)
+def gerar_codigo_consulta(db: Session):
+    now = datetime.datetime.now()
+    prefixo_data = now.strftime("%Y%m%d-%H%M")
+    inicio_dia = datetime.datetime(now.year, now.month, now.day)
+    count_hoje = db.query(models.Consulta).filter(models.Consulta.created_at >= inicio_dia).count() + 1
+    codigo = f"CNS-{prefixo_data}-{count_hoje:04d}"
+    return codigo, now.strftime("%d/%m/%Y %H:%M:%S")
+
+# Dicionário de Vias Estruturantes e Corredores Comerciais/Serviços (Lei 13.123/2025)
+MAPA_CORREDORES_VIARIOS = {
+    "itavuvu": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. Itavuvu)"),
+    "ipanema": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. Ipanema)"),
+    "general carneiro": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. General Carneiro)"),
+    "dom aguirre": ("CCR", "CCR - Corredor Comercial e Rodoviário (Av. Dom Aguirre)"),
+    "antônio carlos comitre": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. A. C. Comitre)"),
+    "antonio carlos comitre": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. A. C. Comitre)"),
+    "são paulo": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. São Paulo)"),
+    "sao paulo": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. São Paulo)"),
+    "afonso vergueiro": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. Afonso Vergueiro)"),
+    "luiz mendes de almeida": ("CCS1", "CCS1 - Corredor Comercial e de Serviços 1 (Av. Mendes de Almeida)"),
+    "carlos reinaldo mendes": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. Eng. Carlos R. Mendes)"),
+    "américo figueiredo": ("CCS1", "CCS1 - Corredor Comercial e de Serviços 1 (Av. Américo Figueiredo)"),
+    "americo figueiredo": ("CCS1", "CCS1 - Corredor Comercial e de Serviços 1 (Av. Américo Figueiredo)"),
+    "independência": ("CCI", "CCI - Corredor Comercial e Industrial (Av. Independência)"),
+    "independencia": ("CCI", "CCI - Corredor Comercial e Industrial (Av. Independência)"),
+    "fernando stecca": ("CCI", "CCI - Corredor Comercial e Industrial (Av. Fernando Stecca)"),
+    "victor andrew": ("CCI", "CCI - Corredor Comercial e Industrial (Av. Victor Andrew)"),
+    "armando pannunzio": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. Armando Pannunzio)"),
+    "izoraida marques peres": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. Izoraida M. Peres)"),
+    "hermelino matarazzo": ("CCS1", "CCS1 - Corredor Comercial e de Serviços 1 (Rua Hermelino Matarazzo)"),
+    "comendador oetterer": ("CCS1", "CCS1 - Corredor Comercial e de Serviços 1 (Rua Comendador Oetterer)"),
+    "barão de tatuí": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. Barão de Tatuí)"),
+    "barao de tatui": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. Barão de Tatuí)"),
+    "washington luiz": ("CCS1", "CCS1 - Corredor Comercial e de Serviços 1 (Av. Washington Luiz)")
+}
 
 # Endpoint de Viabilidade Espacial Cruzando Plano Diretor + Leis Municipais
 @app.post("/api/viabilidade")
-def avaliar_viabilidade(req: ConsultaRequest):
-    ponto = Point(req.longitude, req.latitude)
+def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
     zona_encontrada = None
+    logr_clean = req.logradouro.lower()
 
-    for item in camada_zoneamento:
-        if item["geometria"].contains(ponto):
-            props = item["propriedades"]
-            zona_encontrada = props.get("Name") or props.get("name") or props.get("ZONA") or props.get("zona") or "Zona Mista"
+    # 1. Verifica se o logradouro consultado é um Corredor Comercial ou de Serviços (Lei 13.123/2025)
+    for rua_chave, (sigla_c, nome_c) in MAPA_CORREDORES_VIARIOS.items():
+        if rua_chave in logr_clean:
+            zona_encontrada = nome_c
             break
+
+    # 2. Se não for corredor cadastrado, realiza o cruzamento por coordenadas com os polígonos do QGIS
+    if not zona_encontrada:
+        ponto = Point(req.longitude, req.latitude)
+        for item in camada_zoneamento:
+            if item["geometria"].contains(ponto):
+                props = item["propriedades"]
+                zona_encontrada = props.get("Name") or props.get("name") or props.get("ZONA") or props.get("zona") or "Zona Mista"
+                break
 
     if not zona_encontrada:
         if -23.4800 <= req.latitude <= -23.4700:
@@ -286,97 +333,120 @@ def avaliar_viabilidade(req: ConsultaRequest):
 
     if req.tipo_comercio == "ambulante":
         if any(z in zona_encontrada for z in ["ZCA", "Ambiental"]):
-            return {
-                "zona": zona_enacted,
-                "parecer": "Inapto",
-                "tipo": "Comércio Ambulante",
-                "justificativa": f"Zona de Conservação Ambiental ({zona_encontrada}). Proibida a instalação de equipamentos comerciais informais em vias públicas de preservação.",
-                "requisitos_legais": [
-                    "Proteção Ambiental Municipal (Lei 13.123/2025)",
-                    "Vedada ocupação de área verde protegida"
-                ]
-            }
+            parecer_val = "Inapto"
+            just_val = f"Zona de Conservação Ambiental ({zona_encontrada}). Proibida a instalação de equipamentos comerciais informais em vias públicas de preservação."
+            reqs_val = [
+                "Proteção Ambiental Municipal (Lei 13.123/2025)",
+                "Vedada ocupação de área verde protegida"
+            ]
         elif any(z in zona_encontrada for z in ["ZR1", "ZER"]):
-            return {
-                "zona": zona_encontrada,
-                "parecer": "Necessita de Vistoria",
-                "tipo": "Comércio Ambulante",
-                "justificativa": f"Zona Residencial 1 ({zona_encontrada}). Pp. permissível apenas para Atividades de Apoio, Prestação de Serviços sem incômodo ou Eventos Especiais (Art. 118: SEAP, EVC, UE).",
-                "requisitos_legais": [
-                    "Verificação de não incômodo ao sossego público",
-                    "Análise especial para ponto fixo/ambulante"
-                ]
-            }
+            parecer_val = "Necessita de Vistoria"
+            just_val = f"Zona Residencial 1 ({zona_encontrada}). Permissível apenas para Atividades de Apoio, Prestação de Serviços sem incômodo ou Eventos Especiais (Art. 118: SEAP, EVC, UE)."
+            reqs_val = [
+                "Verificação de não incômodo ao sossego público",
+                "Análise especial para ponto fixo/ambulante"
+            ]
         elif any(z in zona_encontrada for z in ["ZC", "Central", "ZAE", "ZI1", "ZI2", "ZPI", "CCS", "CCI", "CCR"]):
-            return {
-                "zona": zona_encontrada,
-                "parecer": "Apto",
-                "tipo": "Comércio Ambulante",
-                "justificativa": f"Zona Comercial / Industrial ({zona_encontrada}) permissível para ambulantes cadastrados.",
-                "requisitos_legais": [
-                    "Equipamento limitado às dimensões máximas de 2,00m x 2,00m",
-                    "Manutenção de no mínimo 2,00m de faixa livre para pedestres na calçada",
-                    "Cadastro ativo e exibição de QR Code de Autorização Digital"
-                ]
-            }
+            parecer_val = "Apto"
+            desc_tipo = "Zona Central" if "ZC" in zona_encontrada else ("Corredor Comercial e de Serviços" if any(c in zona_encontrada for c in ["CCS", "CCI", "CCR"]) else "Zona Mista/Comercial")
+            just_val = f"{desc_tipo} ({zona_encontrada}) permissível para ambulantes cadastrados."
+            reqs_val = [
+                "Equipamento limitado às dimensões máximas de 2,00m x 2,00m",
+                "Manutenção de no mínimo 2,00m de faixa livre para pedestres na calçada",
+                "Cadastro ativo e exibição de QR Code de Autorização Digital"
+            ]
         else:
-            return {
-                "zona": zona_encontrada,
-                "parecer": "Necessita de Vistoria",
-                "tipo": "Comércio Ambulante",
-                "justificativa": f"Zona residencial predominantemente mista ou de expansão ({zona_encontrada}). Requer medição presencial da calçada por fiscal.",
-                "requisitos_legais": [
-                    "Vistoria presencial obrigatória para medição da calçada (mínimo 2 metros livres)",
-                    "Verificação de não interferência em garagens, pontos de ônibus e esquinas"
-                ]
-            }
+            parecer_val = "Necessita de Vistoria"
+            just_val = f"Zona residencial predominantemente mista ou de expansão ({zona_encontrada}). Requer medição presencial da calçada por fiscal."
+            reqs_val = [
+                "Vistoria presencial obrigatória para medição da calçada (mínimo 2 metros livres)",
+                "Verificação de não interferência em garagens, pontos de ônibus e esquinas"
+            ]
     else:
         if any(z in zona_encontrada for z in ["ZC", "Central", "ZAE", "ZI1", "ZI2", "ZPI", "CCS", "CCI", "CCR", "ZR-C"]):
-            return {
-                "zona": zona_encontrada,
-                "parecer": "Apto",
-                "tipo": "Comércio Fixo",
-                "justificativa": f"Zona Comercial / Industrial ({zona_encontrada}). Instalação comercial de comércio fixo permitida pelo Plano Diretor (Art. 118).",
-                "requisitos_legais": [
-                    "Alvará de Funcionamento visível na entrada principal (Lei 11.367/2016)",
-                    "Uso de Calçada para Mesas/Cadeiras (Bares/Restaurantes): Requer faixa livre mínima de 1,20m (Lei Municipal 13.217/2025)",
-                    "Funcionamento após 23h00 exige Alvará Especial Noturno (Lei Municipal 10.052/2012)",
-                    "Atividades de baixo risco possuem dispensa nos termos da Liberdade Econômica (Lei 12.346/2021)"
-                ]
-            }
+            parecer_val = "Apto"
+            desc_tipo = "Zona Central" if "ZC" in zona_encontrada else ("Corredor Comercial e de Serviços" if any(c in zona_encontrada for c in ["CCS", "CCI", "CCR"]) else "Zona Mista/Comercial")
+            just_val = f"{desc_tipo} ({zona_encontrada}). Instalação comercial de comércio fixo permitida pelo Plano Diretor (Art. 118)."
+            reqs_val = [
+                "Alvará de Funcionamento visível na entrada principal (Lei 11.367/2016)",
+                "Uso de Calçada para Mesas/Cadeiras (Bares/Restaurantes): Requer faixa livre mínima de 1,20m (Lei Municipal 13.217/2025)",
+                "Funcionamento após 23h00 exige Alvará Especial Noturno (Lei Municipal 10.052/2012)",
+                "Atividades de baixo risco possuem dispensa nos termos da Liberdade Econômica (Lei 12.346/2021)"
+            ]
         elif any(z in zona_encontrada for z in ["ZCA", "Ambiental"]):
-            return {
-                "zona": zona_encontrada,
-                "parecer": "Necessita de Vistoria",
-                "tipo": "Comércio Fixo",
-                "justificativa": f"Zona de Conservação Ambiental ({zona_encontrada}). Art. 118 admite EVC (Escritório Virtual), TL (Turismo e Lazer) e UE (Uso Especial), mediante licenciamento ambiental e vistoria prévia.",
-                "requisitos_legais": [
-                    "Licenciamento Ambiental Municipal / SEMA",
-                    "Enquadramento estrito nas categorias EVC, TL ou UE"
-                ]
-            }
+            parecer_val = "Necessita de Vistoria"
+            just_val = f"Zona de Conservação Ambiental ({zona_encontrada}). Art. 118 admite EVC (Escritório Virtual), TL (Turismo e Lazer) e UE (Uso Especial), mediante licenciamento ambiental e vistoria prévia."
+            reqs_val = [
+                "Licenciamento Ambiental Municipal / SEMA",
+                "Enquadramento estrito nas categorias EVC, TL ou UE"
+            ]
         elif any(z in zona_encontrada for z in ["ZR1", "ZER"]):
-            return {
-                "zona": zona_encontrada,
-                "parecer": "Necessita de Vistoria",
-                "tipo": "Comércio Fixo",
-                "justificativa": f"Zona Residencial 1 ({zona_encontrada}). O Art. 118 admite SEAP (Serviços/Apoio), EVC (Escritórios Virtuais) e UE (Uso Especial). Comércios varejistas de alto impacto são vedados.",
-                "requisitos_legais": [
-                    "Análise de enquadramento da atividade (CNAE em SEAP, EVC ou UE)",
-                    "Ausência de incomodidade sonora ou de tráfego de carga"
-                ]
-            }
+            parecer_val = "Necessita de Vistoria"
+            just_val = f"Zona Residencial 1 ({zona_encontrada}). O Art. 118 admite SEAP (Serviços/Apoio), EVC (Escritórios Virtuais) e UE (Uso Especial). Comércios varejistas de alto impacto são vedados."
+            reqs_val = [
+                "Análise de enquadramento da atividade (CNAE em SEAP, EVC ou UE)",
+                "Ausência de incomodidade sonora ou de tráfego de carga"
+            ]
         else:
-            return {
-                "zona": zona_encontrada,
-                "parecer": "Necessita de Vistoria",
-                "tipo": "Comércio Fixo",
-                "justificativa": f"Zona mista ou de requalificação ({zona_encontrada}). Permite comércio local/bairro após análise de enquadramento de uso (Art. 118).",
-                "requisitos_legais": [
-                    "Análise de Ruído e Incomodidade (Lei 8.345/2007 e NBR-10151)",
-                    "Vistoria de Habite-se, Acessibilidade e Vagas de Estacionamento"
-                ]
-            }
+            parecer_val = "Necessita de Vistoria"
+            just_val = f"Zona mista ou de requalificação ({zona_encontrada}). Permite comércio local/bairro após análise de enquadramento de uso (Art. 118)."
+            reqs_val = [
+                "Verificação do porte do estabelecimento",
+                "Certidão de Uso e Ocupação do Solo"
+            ]
+
+    codigo_consulta, data_hora_fmt = gerar_codigo_consulta(db)
+
+    try:
+        nova_consulta = models.Consulta(
+            codigo_consulta=codigo_consulta,
+            logradouro=req.logradouro,
+            latitude=req.latitude,
+            longitude=req.longitude,
+            tipo_comercio=req.tipo_comercio,
+            cnae=req.cnae or "",
+            zona_codigo=zona_encontrada.split(" - ")[0] if " - " in zona_encontrada else zona_encontrada[:4],
+            zona_nome=zona_encontrada,
+            parecer=parecer_val,
+            justificativa=just_val,
+            requisitos_json=json.dumps(reqs_val),
+            data_hora=data_hora_fmt
+        )
+        db.add(nova_consulta)
+        db.commit()
+    except Exception as e:
+        print(f"⚠️ Erro ao persistir consulta no SQLite: {e}")
+        db.rollback()
+
+    return {
+        "codigo_consulta": codigo_consulta,
+        "data_hora": data_hora_fmt,
+        "zona": zona_encontrada,
+        "parecer": parecer_val,
+        "tipo": "Comércio Ambulante" if req.tipo_comercio == "ambulante" else "Comércio Fixo",
+        "justificativa": just_val,
+        "requisitos_legais": reqs_val
+    }
+
+@app.get("/api/consulta/{codigo_consulta}")
+def buscar_consulta(codigo_consulta: str, db: Session = Depends(get_db)):
+    c = db.query(models.Consulta).filter(models.Consulta.codigo_consulta == codigo_consulta).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Consulta não encontrada no banco de dados.")
+    
+    return {
+        "codigo_consulta": c.codigo_consulta,
+        "data_hora": c.data_hora,
+        "logradouro": c.logradouro,
+        "latitude": c.latitude,
+        "longitude": c.longitude,
+        "tipo_comercio": c.tipo_comercio,
+        "cnae": c.cnae,
+        "zona": c.zona_nome,
+        "parecer": c.parecer,
+        "justificativa": c.justificativa,
+        "requisitos_legais": json.loads(c.requisitos_json or "[]")
+    }
 
 # Endpoint POST para validar acesso do ambulante sem senha
 @app.post("/api/carteira/acesso")

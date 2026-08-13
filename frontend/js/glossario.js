@@ -151,7 +151,7 @@ const TERMOS_GLOSSARIO = [
     descricao: "Equipamentos comunitários e de infraestrutura pública (escolas, hospitais, creches, cemitérios, fóruns e secretarias)."
   },
   {
-    termo: "SEMEPP / SEDETTUR",
+    termo: "Secretaria de Desenvolvimento Econômico",
     categoria: "Órgãos",
     baseLegal: "Decreto nº 26.501/2021, Art. 12",
     descricao: "Secretaria de Desenvolvimento Econômico, Trabalho e Turismo de Sorocaba, responsável pela gestão das licenças comerciais e acompanhamento dos permissionários."

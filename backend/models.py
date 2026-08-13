@@ -35,3 +35,21 @@ class Ambulante(Base):
     status = Column(String, default="Ativo")
     secretario = Column(String, default="Paulo Henrique Marcelo")
     prefeito = Column(String, default="Rodrigo Maganhato")
+
+class Consulta(Base):
+    __tablename__ = "consultas_viabilidade"
+
+    id = Column(Integer, primary_key=True, index=True)
+    codigo_consulta = Column(String, unique=True, index=True) # Ex: CNS-20260813-1104-0042
+    logradouro = Column(String)
+    latitude = Column(Float)
+    longitude = Column(Float)
+    tipo_comercio = Column(String)
+    cnae = Column(String, default="")
+    zona_codigo = Column(String)
+    zona_nome = Column(String)
+    parecer = Column(String)
+    justificativa = Column(String)
+    requisitos_json = Column(String)
+    data_hora = Column(String)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

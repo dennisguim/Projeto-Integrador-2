@@ -211,7 +211,49 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+  // Verifica se há permalink por código ou parâmetro na URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const codeParam = urlParams.get("id") || urlParams.get("code");
+  if (codeParam) {
+    carregarConsultaPorCodigo(codeParam);
+  }
 });
+
+async function carregarConsultaPorCodigo(code) {
+  try {
+    const response = await fetch(`http://localhost:8000/api/consulta/${encodeURIComponent(code)}`);
+    if (response.ok) {
+      const data = await response.json();
+      window.ultimoPontoConsultado = {
+        lat: data.latitude,
+        lng: data.longitude,
+        logradouro: data.logradouro
+      };
+      window.codigoConsultaAtual = data.codigo_consulta;
+      window.dataHoraConsultaAtual = data.data_hora;
+
+      if (data.tipo_comercio) setTipoComercio(data.tipo_comercio);
+      if (data.cnae) {
+        const cnaeInp = document.getElementById("cnae-input");
+        if (cnaeInp) cnaeInp.value = data.cnae;
+      }
+      const addrInp = document.getElementById("address-input");
+      if (addrInp) addrInp.value = data.logradouro;
+
+      if (map) {
+        map.setView([data.latitude, data.longitude], 17);
+        if (marker) map.removeLayer(marker);
+        marker = L.marker([data.latitude, data.longitude]).addTo(map);
+        marker.bindPopup(`<div style="font-size:0.85rem;"><strong>📍 Ponto Consultado</strong><br>${data.logradouro}</div>`).openPopup();
+      }
+
+      exibirResultado(data);
+    }
+  } catch (err) {
+    console.warn("Não foi possível carregar consulta salva via permalink.", err);
+  }
+}
 
 function carregarSugestoesCNAE(query) {
   const cnaeSuggestionsList = document.getElementById("cnae-suggestions-list");
@@ -454,6 +496,7 @@ async function validarPonto(lat, lng, logradouro) {
   marker.bindPopup(`<div style="font-size:0.85rem;"><strong>📍 Ponto Selecionado</strong><br>${logradouro}</div>`).openPopup();
 
   try {
+    const cnaeVal = document.getElementById("cnae-input") ? document.getElementById("cnae-input").value.trim() : "";
     const response = await fetch("http://localhost:8000/api/viabilidade", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -461,11 +504,19 @@ async function validarPonto(lat, lng, logradouro) {
         latitude: lat,
         longitude: lng,
         logradouro: logradouro,
-        tipo_comercio: tipoComercioSelecionado
+        tipo_comercio: tipoComercioSelecionado,
+        cnae: cnaeVal
       })
     });
 
     const data = await response.json();
+    if (data.codigo_consulta) {
+      window.codigoConsultaAtual = data.codigo_consulta;
+      window.dataHoraConsultaAtual = data.data_hora;
+      // Atualiza URL com permalink único sem recarregar a página
+      const newUrl = `${window.location.pathname}?id=${data.codigo_consulta}`;
+      window.history.replaceState(null, "", newUrl);
+    }
     exibirResultado(data);
   } catch (error) {
     console.error("Erro ao consultar viabilidade:", error);
@@ -580,6 +631,26 @@ async function exibirResultado(data) {
   resultCard.classList.remove("hidden");
   document.getElementById("res-tipo").textContent = data.tipo || (tipoComercioSelecionado === "ambulante" ? "Comércio Ambulante" : "Comércio Fixo");
 
+  const elCodigo = document.getElementById("res-codigo-consulta");
+  if (elCodigo) {
+    elCodigo.textContent = data.codigo_consulta || window.codigoConsultaAtual || "CNS-LOCAL";
+  }
+
+  const elLogradouro = document.getElementById("res-endereco-logradouro");
+  if (elLogradouro && (window.ultimoPontoConsultado || data.logradouro)) {
+    elLogradouro.textContent = (window.ultimoPontoConsultado ? window.ultimoPontoConsultado.logradouro : data.logradouro);
+  }
+
+  const elCnaeRow = document.getElementById("res-cnae-row");
+  const elCnaeCodigo = document.getElementById("res-cnae-codigo");
+  const cnaeValor = (cnaeInput ? cnaeInput.value.trim() : "") || data.cnae || "";
+  if (cnaeValor && elCnaeRow && elCnaeCodigo) {
+    elCnaeCodigo.textContent = cnaeValor;
+    elCnaeRow.classList.remove("hidden");
+  } else if (elCnaeRow) {
+    elCnaeRow.classList.add("hidden");
+  }
+
   // Extrai e separa o código do zoneamento
   let zonaCodigo = "ZM";
   let zonaDesc = data.zona || "Zona Mista";
@@ -632,7 +703,6 @@ async function exibirResultado(data) {
     const cnaeBadge = document.getElementById("cnae-badge");
     const cnaeJustificativa = document.getElementById("cnae-justificativa");
 
-    // Mostra indicador visual de progresso da requisição externa
     cnaeBadge.className = "cnae-badge cnae-badge-vistoria";
     cnaeBadge.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-2" style="animation: spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
@@ -640,7 +710,6 @@ async function exibirResultado(data) {
     `;
     cnaeJustificativa.textContent = "Buscando descrição oficial da atividade...";
 
-    // Analisa a atividade (consulta assíncrona ao IBGE Concla)
     const atividade = await analisarAtividadeCNAE(cnaeValue);
 
     if (atividade) {
@@ -664,7 +733,6 @@ async function exibirResultado(data) {
           cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE enquadrado em <strong>${atividade.cat}</strong>) é <strong>totalmente compatível</strong> com o zoneamento <strong>${zonaCodigo}</strong> no horário diurno regular.`;
         }
 
-        // Condicionantes do Decreto 30.529/2025 (Noturno e Porte / Metragem Excedente)
         if (atividade.cat_noturno) {
           const noturnoPermitido = usosPermitidos.includes(atividade.cat_noturno);
           const noturnoMsg = noturnoPermitido
@@ -760,224 +828,53 @@ async function exibirResultado(data) {
 // FUNÇÕES DE LAUDO TÉCNICO, EXPORTAÇÃO PDF, IMPRESSÃO E COMPARTILHAMENTO
 // ==========================================================================
 
-async function prepararLaudoTemplate() {
-  const p = window.ultimoPontoConsultado || { lat: -23.5015, lng: -47.4581, logradouro: "Ponto Selecionado em Sorocaba - SP" };
-  
-  // 1. Número de protocolo e timestamp
-  const now = new Date();
-  const dataFormatada = now.toLocaleDateString("pt-BR") + " " + now.toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' });
-  const protoNum = "SOR-2026-" + Math.floor(100000 + Math.random() * 900000);
-  
-  // Hash simples de autenticidade
-  const rawData = `${protoNum}-${p.lat}-${p.lng}-${now.getTime()}`;
-  let hashVal = 0;
-  for (let i = 0; i < rawData.length; i++) {
-    hashVal = ((hashVal << 5) - hashVal) + rawData.charCodeAt(i);
-    hashVal |= 0;
-  }
-  const hashHex = "SHA256-" + Math.abs(hashVal).toString(16).toUpperCase() + "89F2A1";
-
-  // 2. Meta Dados
-  const elProto = document.getElementById("laudo-protocolo");
-  const elData = document.getElementById("laudo-data-emissao");
-  const elHash = document.getElementById("laudo-auth-hash");
-  if (elProto) elProto.textContent = protoNum;
-  if (elData) elData.textContent = dataFormatada;
-  if (elHash) elHash.textContent = hashHex;
-
-  // 3. Dados da Consulta
-  const elAddr = document.getElementById("laudo-endereco");
-  const elCoords = document.getElementById("laudo-coords");
-  const elMod = document.getElementById("laudo-modalidade");
-  const elZonaCod = document.getElementById("laudo-zona-codigo");
-  const elZonaDesc = document.getElementById("laudo-zona-desc");
-
+function atualizarMetaImpressao() {
+  const p = window.ultimoPontoConsultado || { logradouro: "Sorocaba / SP" };
+  const elAddr = document.getElementById("res-endereco-logradouro");
   if (elAddr) elAddr.textContent = p.logradouro;
-  if (elCoords) elCoords.textContent = `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
-  if (elMod) elMod.textContent = tipoComercioSelecionado === "ambulante" ? "Comércio Ambulante (Uso do Espaço Público)" : "Comércio Fixo (Estabelecimento)";
-  
-  const resZonaCod = document.getElementById("res-zona-codigo") ? document.getElementById("res-zona-codigo").textContent : "ZM";
-  const resZonaDesc = document.getElementById("res-zona") ? document.getElementById("res-zona").textContent : "Zona Mista";
-  if (elZonaCod) elZonaCod.textContent = resZonaCod;
-  if (elZonaDesc) elZonaDesc.textContent = resZonaDesc;
 
-  // 4. Parecer Técnico e Justificativa
-  const parecerBadgeEl = document.getElementById("parecer-badge");
-  const laudoBadge = document.getElementById("laudo-parecer-badge");
-  const laudoJustificativa = document.getElementById("laudo-justificativa");
-  const resJustificativa = document.getElementById("res-justificativa");
+  const cod = window.codigoConsultaAtual || document.getElementById("res-codigo-consulta")?.textContent || "CNS-2026";
+  const dataFmt = window.dataHoraConsultaAtual || new Date().toLocaleString("pt-BR");
 
-  if (parecerBadgeEl && laudoBadge) {
-    laudoBadge.textContent = parecerBadgeEl.innerText.trim();
-    laudoBadge.className = "laudo-badge";
-    if (parecerBadgeEl.classList.contains("badge-apto")) {
-      laudoBadge.classList.add("laudo-badge-apto");
-    } else if (parecerBadgeEl.classList.contains("badge-inapto")) {
-      laudoBadge.classList.add("laudo-badge-inapto");
-    } else {
-      laudoBadge.classList.add("laudo-badge-vistoria");
-    }
-  }
-
-  if (resJustificativa && laudoJustificativa) {
-    laudoJustificativa.textContent = resJustificativa.textContent;
-  }
-
-  // 5. Atividade e CNAE
-  const cnaeInput = document.getElementById("cnae-input");
-  const laudoRowCnae = document.getElementById("laudo-row-cnae");
-  const laudoCnaeInfo = document.getElementById("laudo-cnae-info");
-  const laudoCnaeBoxFull = document.getElementById("laudo-cnae-box-full");
-  const laudoCnaeDetalheText = document.getElementById("laudo-cnae-detalhe-text");
-  const cnaeJustificativa = document.getElementById("cnae-justificativa");
-
-  if (cnaeInput && cnaeInput.value.trim()) {
-    if (laudoRowCnae) laudoRowCnae.style.display = "table-row";
-    if (laudoCnaeInfo) laudoCnaeInfo.textContent = cnaeInput.value.trim();
-    if (laudoCnaeBoxFull && cnaeJustificativa && cnaeJustificativa.textContent) {
-      laudoCnaeBoxFull.style.display = "block";
-      laudoCnaeDetalheText.innerHTML = cnaeJustificativa.innerHTML;
-    }
-  } else {
-    if (laudoRowCnae) laudoRowCnae.style.display = "none";
-    if (laudoCnaeBoxFull) laudoCnaeBoxFull.style.display = "none";
-  }
-
-  // 6. Usos Permitidos
-  const usosContainer = document.getElementById("res-usos-permitidos");
-  const laudoUsosTags = document.getElementById("laudo-usos-tags");
-  if (usosContainer && laudoUsosTags) {
-    laudoUsosTags.innerHTML = "";
-    const tags = usosContainer.querySelectorAll(".use-tag");
-    tags.forEach(t => {
-      const span = document.createElement("span");
-      span.className = "laudo-tag";
-      span.textContent = t.textContent;
-      laudoUsosTags.appendChild(span);
-    });
-  }
-
-  // 7. Requisitos Municipais
-  const resReqs = document.getElementById("res-requisitos");
-  const laudoReqList = document.getElementById("laudo-requisitos-list");
-  if (resReqs && laudoReqList) {
-    laudoReqList.innerHTML = "";
-    const lis = resReqs.querySelectorAll("li");
-    lis.forEach(li => {
-      const newLi = document.createElement("li");
-      newLi.textContent = li.textContent.trim();
-      laudoReqList.appendChild(newLi);
-    });
-  }
-
-  // 8. Snapshot do Mapa Leaflet
-  const mapImg = document.getElementById("laudo-map-snapshot");
-  if (mapImg && typeof html2canvas !== "undefined") {
-    try {
-      const mapDiv = document.getElementById("map");
-      const canvas = await html2canvas(mapDiv, { useCORS: true, logging: false });
-      mapImg.src = canvas.toDataURL("image/jpeg", 0.9);
-    } catch (e) {
-      console.warn("Não foi possível capturar a imagem do mapa para o laudo estático.", e);
-    }
-  }
+  const elProto = document.getElementById("print-protocolo");
+  const elData = document.getElementById("print-data");
+  if (elProto) elProto.textContent = cod;
+  if (elData) elData.textContent = dataFmt;
 }
 
-async function exportarPDF() {
-  if (typeof html2pdf === "undefined") {
-    alert("A biblioteca de geração de PDF ainda está sendo carregada. Aguarde um instante.");
-    return;
+function salvarOuImprimirPDF() {
+  atualizarMetaImpressao();
+  exibirToast("🖨️ Preparando laudo para salvar/imprimir...");
+
+  if (map) {
+    map.invalidateSize();
+    if (marker) {
+      const latlng = marker.getLatLng();
+      map.setView(latlng, map.getZoom() || 16, { animate: false });
+    }
   }
-
-  exibirToast("📄 Gerando PDF em página única...");
-
-  await prepararLaudoTemplate();
-
-  const element = document.getElementById("laudo-print-template");
-  element.style.display = "block";
-
-  const proto = document.getElementById("laudo-protocolo").textContent || "SOR-2026";
-  const opt = {
-    margin: [4, 4, 4, 4],
-    filename: `Laudo_Viabilidade_Sorocaba_${proto}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, logging: false },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
-
-  try {
-    await html2pdf().set(opt).from(element).save();
-    exibirToast("✅ PDF salvo com sucesso!");
-  } catch (err) {
-    console.error("Erro ao gerar PDF:", err);
-    alert("Erro ao exportar PDF. Você pode utilizar o botão 'Imprimir' e selecionar 'Salvar como PDF'.");
-  } finally {
-    element.style.display = "none";
-  }
-}
-
-async function imprimirLaudo() {
-  exibirToast("🖨️ Preparando documento para impressão...");
-  await prepararLaudoTemplate();
-
-  const element = document.getElementById("laudo-print-template");
-  element.style.display = "block";
 
   setTimeout(() => {
     window.print();
-    element.style.display = "none";
   }, 300);
 }
 
 async function compartilharLaudo() {
   const p = window.ultimoPontoConsultado || { logradouro: "Sorocaba/SP" };
+  const codigo = window.codigoConsultaAtual || document.getElementById("res-codigo-consulta")?.textContent || "";
   const parecer = document.getElementById("parecer-badge") ? document.getElementById("parecer-badge").innerText.trim() : "Consulta";
   const zona = document.getElementById("res-zona-codigo") ? document.getElementById("res-zona-codigo").innerText.trim() : "Zoneamento";
   const tipo = tipoComercioSelecionado === "ambulante" ? "Comércio Ambulante" : "Comércio Fixo";
   
-  const textSummary = `📋 *Laudo de Viabilidade Espacial - Sorocaba*\n📍 Endereço: ${p.logradouro}\n🏪 Modalidade: ${tipo}\n🗺️ Zoneamento: ${zona}\n📊 Parecer: ${parecer}\n\nEmitido via Sistema de Viabilidade (Lei 13.123/2025).`;
+  const permalinkUrl = window.location.href;
+  const textSummary = `📋 *Viabilidade Espacial - Sorocaba*\n🔍 Código da Consulta: ${codigo}\n📍 Endereço: ${p.logradouro}\n🏪 Modalidade: ${tipo}\n🗺️ Zoneamento: ${zona}\n📊 Parecer: ${parecer}\n\nLink direto da consulta: ${permalinkUrl}`;
 
-  await prepararLaudoTemplate();
-
-  // 1. Tenta compartilhamento direto do ARQUIVO PDF (quando suportado pelo navegador mobile, como WhatsApp/Telegram/Email/Drive)
-  if (typeof html2pdf !== "undefined" && navigator.canShare) {
-    try {
-      const element = document.getElementById("laudo-print-template");
-      element.style.display = "block";
-
-      const pdfBlob = await html2pdf().set({
-        margin: [4, 4, 4, 4],
-        filename: `Laudo_Viabilidade_Sorocaba.pdf`,
-        image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      }).from(element).output('blob');
-
-      element.style.display = "none";
-
-      const pdfFile = new File([pdfBlob], `Laudo_Viabilidade_Sorocaba.pdf`, { type: 'application/pdf' });
-
-      if (navigator.canShare({ files: [pdfFile] })) {
-        await navigator.share({
-          title: 'Laudo de Viabilidade Espacial - Sorocaba',
-          text: textSummary,
-          files: [pdfFile]
-        });
-        exibirToast("📲 Compartilhado com sucesso!");
-        return;
-      }
-    } catch (err) {
-      console.warn("Compartilhamento nativo de arquivo PDF indisponível ou cancelado. Alternando para compartilhamento por texto.", err);
-    }
-  }
-
-  // 2. Fallback para Web Share API nativa do sistema (Menu do Android/iOS)
   if (navigator.share) {
     try {
       await navigator.share({
-        title: 'Laudo de Viabilidade Espacial - Sorocaba',
+        title: `Viabilidade Espacial Sorocaba (${codigo})`,
         text: textSummary,
-        url: window.location.href
+        url: permalinkUrl
       });
       exibirToast("📲 Compartilhado com sucesso!");
       return;
@@ -987,10 +884,9 @@ async function compartilharLaudo() {
     }
   }
 
-  // 3. Fallback para área de transferência (Desktop)
   try {
-    await navigator.clipboard.writeText(textSummary + "\n" + window.location.href);
-    exibirToast("📋 Parecer copiado para a área de transferência!");
+    await navigator.clipboard.writeText(permalinkUrl);
+    exibirToast("📋 Link direto da consulta copiado para a área de transferência!");
   } catch (e) {
     alert(textSummary);
   }
