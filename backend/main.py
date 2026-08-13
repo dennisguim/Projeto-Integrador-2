@@ -304,6 +304,28 @@ MAPA_CORREDORES_VIARIOS = {
     "washington luiz": ("CCS1", "CCS1 - Corredor Comercial e de Serviços 1 (Av. Washington Luiz)")
 }
 
+def obter_nome_oficial_zona(zona_str: str) -> str:
+    z = zona_str.upper()
+    if "CCS1" in z: return "Corredor Comercial e de Serviços 1"
+    if "CCS2" in z: return "Corredor Comercial e de Serviços 2"
+    if "CCI" in z: return "Corredor Comercial e Industrial"
+    if "CCR" in z: return "Corredor Comercial e Rodoviário"
+    if "ZCH" in z: return "Zona do Centro Histórico"
+    if "ZC" in z: return "Zona Central"
+    if "ZR1" in z: return "Zona Residencial 1"
+    if "ZR2" in z: return "Zona Residencial 2"
+    if "ZR3EXP" in z or "ZR3-E" in z: return "Zona Residencial 3 de Expansão"
+    if "ZR3" in z: return "Zona Residencial 3"
+    if "ZRDS" in z: return "Zona Residencial de Desenvolvimento Sustentável"
+    if "ZRURAL" in z or "RURAL" in z: return "Zona Rural"
+    if "ZAE" in z: return "Zona de Adensamento Especial"
+    if "ZI1" in z: return "Zona Industrial 1"
+    if "ZI2" in z: return "Zona Industrial 2"
+    if "ZPI" in z: return "Zona Predominantemente Industrial"
+    if "ZCA" in z: return "Zona de Conservação Ambiental"
+    if "AEIP" in z: return "Área Especial de Interesse Público"
+    return "Zona Mista Urbana"
+
 # Endpoint de Viabilidade Espacial Cruzando Plano Diretor + Leis Municipais
 @app.post("/api/viabilidade")
 def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
@@ -331,25 +353,26 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
         else:
             zona_encontrada = "ZC - Zona Central"
 
+    nome_oficial = obter_nome_oficial_zona(zona_encontrada)
+
     if req.tipo_comercio == "ambulante":
         if any(z in zona_encontrada for z in ["ZCA", "Ambiental"]):
             parecer_val = "Inapto"
-            just_val = f"Zona de Conservação Ambiental ({zona_encontrada}). Proibida a instalação de equipamentos comerciais informais em vias públicas de preservação."
+            just_val = f"{nome_oficial} ({zona_encontrada}). Proibida a instalação de equipamentos comerciais informais em vias públicas de preservação."
             reqs_val = [
                 "Proteção Ambiental Municipal (Lei 13.123/2025)",
                 "Vedada ocupação de área verde protegida"
             ]
         elif any(z in zona_encontrada for z in ["ZR1", "ZER"]):
             parecer_val = "Necessita de Vistoria"
-            just_val = f"Zona Residencial 1 ({zona_encontrada}). Permissível apenas para Atividades de Apoio, Prestação de Serviços sem incômodo ou Eventos Especiais (Art. 118: SEAP, EVC, UE)."
+            just_val = f"{nome_oficial} ({zona_encontrada}). Permissível apenas para Atividades de Apoio, Prestação de Serviços sem incômodo ou Eventos Especiais (Art. 118: SEAP, EVC, UE)."
             reqs_val = [
                 "Verificação de não incômodo ao sossego público",
                 "Análise especial para ponto fixo/ambulante"
             ]
         elif any(z in zona_encontrada for z in ["ZC", "Central", "ZAE", "ZI1", "ZI2", "ZPI", "CCS", "CCI", "CCR"]):
             parecer_val = "Apto"
-            desc_tipo = "Zona Central" if "ZC" in zona_encontrada else ("Corredor Comercial e de Serviços" if any(c in zona_encontrada for c in ["CCS", "CCI", "CCR"]) else "Zona Mista/Comercial")
-            just_val = f"{desc_tipo} ({zona_encontrada}) permissível para ambulantes cadastrados."
+            just_val = f"{nome_oficial} ({zona_encontrada}) permissível para ambulantes cadastrados."
             reqs_val = [
                 "Equipamento limitado às dimensões máximas de 2,00m x 2,00m",
                 "Manutenção de no mínimo 2,00m de faixa livre para pedestres na calçada",
@@ -357,7 +380,7 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
             ]
         else:
             parecer_val = "Necessita de Vistoria"
-            just_val = f"Zona residencial predominantemente mista ou de expansão ({zona_encontrada}). Requer medição presencial da calçada por fiscal."
+            just_val = f"{nome_oficial} ({zona_encontrada}). Permite comércio ambulante com equipamento adequado, sujeito a vistoria para medição de calçada (faixa livre mínima de 2,00m)."
             reqs_val = [
                 "Vistoria presencial obrigatória para medição da calçada (mínimo 2 metros livres)",
                 "Verificação de não interferência em garagens, pontos de ônibus e esquinas"
@@ -365,8 +388,7 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
     else:
         if any(z in zona_encontrada for z in ["ZC", "Central", "ZAE", "ZI1", "ZI2", "ZPI", "CCS", "CCI", "CCR", "ZR-C"]):
             parecer_val = "Apto"
-            desc_tipo = "Zona Central" if "ZC" in zona_encontrada else ("Corredor Comercial e de Serviços" if any(c in zona_encontrada for c in ["CCS", "CCI", "CCR"]) else "Zona Mista/Comercial")
-            just_val = f"{desc_tipo} ({zona_encontrada}). Instalação comercial de comércio fixo permitida pelo Plano Diretor (Art. 118)."
+            just_val = f"{nome_oficial} ({zona_encontrada}). Instalação comercial de comércio fixo permitida pelo Plano Diretor (Art. 118)."
             reqs_val = [
                 "Alvará de Funcionamento visível na entrada principal (Lei 11.367/2016)",
                 "Uso de Calçada para Mesas/Cadeiras (Bares/Restaurantes): Requer faixa livre mínima de 1,20m (Lei Municipal 13.217/2025)",
@@ -375,21 +397,21 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
             ]
         elif any(z in zona_encontrada for z in ["ZCA", "Ambiental"]):
             parecer_val = "Necessita de Vistoria"
-            just_val = f"Zona de Conservação Ambiental ({zona_encontrada}). Art. 118 admite EVC (Escritório Virtual), TL (Turismo e Lazer) e UE (Uso Especial), mediante licenciamento ambiental e vistoria prévia."
+            just_val = f"{nome_oficial} ({zona_encontrada}). Art. 118 admite EVC (Escritório Virtual), TL (Turismo e Lazer) e UE (Uso Especial), mediante licenciamento ambiental e vistoria prévia."
             reqs_val = [
                 "Licenciamento Ambiental Municipal / SEMA",
                 "Enquadramento estrito nas categorias EVC, TL ou UE"
             ]
         elif any(z in zona_encontrada for z in ["ZR1", "ZER"]):
             parecer_val = "Necessita de Vistoria"
-            just_val = f"Zona Residencial 1 ({zona_encontrada}). O Art. 118 admite SEAP (Serviços/Apoio), EVC (Escritórios Virtuais) e UE (Uso Especial). Comércios varejistas de alto impacto são vedados."
+            just_val = f"{nome_oficial} ({zona_encontrada}). O Art. 118 admite SEAP (Serviços/Apoio), EVC (Escritórios Virtuais) e UE (Uso Especial). Comércios varejistas de alto impacto são vedados."
             reqs_val = [
                 "Análise de enquadramento da atividade (CNAE em SEAP, EVC ou UE)",
                 "Ausência de incomodidade sonora ou de tráfego de carga"
             ]
         else:
             parecer_val = "Necessita de Vistoria"
-            just_val = f"Zona mista ou de requalificação ({zona_encontrada}). Permite comércio local/bairro após análise de enquadramento de uso (Art. 118)."
+            just_val = f"{nome_oficial} ({zona_encontrada}). Permite comércio local/bairro (CSI, SEAP, EVC) após análise de enquadramento de uso e porte (Art. 118)."
             reqs_val = [
                 "Verificação do porte do estabelecimento",
                 "Certidão de Uso e Ocupação do Solo"
