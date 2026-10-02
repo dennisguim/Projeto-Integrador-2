@@ -27,6 +27,40 @@ SECRET_KEY_SEMEPP = "sorocaba_secret_key_2025_lei_13123"
 GEOJSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "sorocaba_zoneamento.geojson")
 CORREDORES_GEOJSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "sorocaba_corredores.geojson")
 
+# Carregamento da Base de CNAEs do Decreto 30.529/2025
+CNAE_JSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "cnae_decreto_30529.json")
+banco_cnaes = {}
+if os.path.exists(CNAE_JSON_PATH):
+    try:
+        with open(CNAE_JSON_PATH, "r", encoding="utf-8") as f:
+            banco_cnaes = json.load(f)
+        print(f"✅ Carregados {len(banco_cnaes)} CNAEs do Decreto 30.529/2025.")
+    except Exception as e:
+        print(f"⚠️ Erro ao carregar JSON de CNAEs: {e}")
+
+# Matriz de Usos Permitidos por Zona (Lei 13.123/2025, Art. 118)
+MAPEAMENTO_USOS = {
+    "ZC": ["RU", "RM", "RT", "RSI", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "TL", "UE"],
+    "ZPI": ["RU", "RM", "RT", "RSI", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "TL", "UE"],
+    "ZR1": ["RU", "RT", "RSI", "SEAP", "EVC", "UE"],
+    "ZR2": ["RU", "RM", "RT", "RSI", "CSI", "SEAP", "EVC", "TL", "UE"],
+    "ZR3": ["RU", "RM", "RT", "RSI", "CSI", "SEAP", "EVC", "TL", "UE"],
+    "ZR3EXP": ["RU", "RM", "RT", "RSI", "CSI", "SEAP", "EVC", "TL", "UE"],
+    "ZR3-E": ["RU", "RM", "RT", "RSI", "CSI", "SEAP", "EVC", "TL", "UE"],
+    "ZRDS": ["RU", "RT", "RSI", "SEAP", "EVC", "UE"],
+    "ZI1": ["PGTP", "PGTI", "GRN", "GRD", "CSI", "EVC", "UAI", "UE"],
+    "ZI2": ["PGTP", "PGTI", "GRN", "GRD", "CSI", "EVC", "UE"],
+    "ZAE": ["PGTP", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "UE"],
+    "ZCH": ["RU", "RT", "RSI", "EVC", "TL", "UE"],
+    "ZCA": ["RU", "RT", "RSI", "EVC", "TL", "UE"],
+    "CCS1": ["RU", "RM", "RT", "RSI", "CSI", "SEAP", "EVC", "TL", "UE"],
+    "CCS2": ["RU", "RM", "RT", "RSI", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "TL", "UE"],
+    "CCI": ["PGTP", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "UE"],
+    "CCR": ["RU", "RM", "RT", "RSI", "PGTP", "PGTI", "GRD", "GRN", "CSI", "SEAP", "EVC", "TL", "UE"],
+    "ZRURAL": ["RU", "EVC", "PGTI", "PGTP", "CSI", "TL", "UAI", "UE", "AAP"],
+    "AEIP": ["CSI", "SEAP", "EVC", "UE"]
+}
+
 # Carregamento da Base Espacial do Plano Diretor em Memória
 camada_zoneamento = []
 if os.path.exists(GEOJSON_PATH):
@@ -447,6 +481,30 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
                 "Verificação do porte do estabelecimento",
                 "Certidão de Uso e Ocupação do Solo"
             ]
+
+    # Cruzamento Dinâmico com CNAE se fornecido
+    if req.cnae and req.cnae.strip():
+        cnae_input_clean = req.cnae.strip()
+        cnae_digits = "".join(filter(str.isdigit, cnae_input_clean))
+        sigla_pura = zona_encontrada.split(" - ")[0].strip().upper().replace("-E", "EXP")
+        usos_permitidos = MAPEAMENTO_USOS.get(sigla_pura, ["CSI", "SEAP", "EVC", "UE"])
+        
+        cnae_match = None
+        for k, v in banco_cnaes.items():
+            k_digits = "".join(filter(str.isdigit, k))
+            if cnae_digits and (k_digits == cnae_digits or (len(cnae_digits) >= 4 and k_digits.startswith(cnae_digits))):
+                cnae_match = v
+                break
+        
+        if cnae_match:
+            cat_cnae = cnae_match.get("conds", {}).get("padrao", "CSI").split("(")[0].strip()
+            if cat_cnae not in usos_permitidos:
+                parecer_val = "Inapto"
+                just_val = f"{nome_oficial} ({zona_encontrada}). A atividade consultada (CNAE {cnae_match.get('cnae', req.cnae)} - {cnae_match.get('desc')}) enquadra-se na categoria {cat_cnae}, a qual é VEDADA neste zoneamento nos termos do Art. 118 da Lei 13.123/2025 e Decreto 30.529/2025."
+                reqs_val = [
+                    f"Atividade incompatível com o zoneamento {sigla_pura}",
+                    "Vedada a concessão de alvará de funcionamento ou autorização para este CNAE no local"
+                ]
 
     codigo_consulta, data_hora_fmt = gerar_codigo_consulta(db)
 

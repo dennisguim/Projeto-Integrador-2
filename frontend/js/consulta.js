@@ -56,11 +56,11 @@ const BANCO_CNAE = {
   "4789004": { desc: "Comércio varejista de animais vivos e de artigos para pet shop", cat: "CSI" },
   "4753900": { desc: "Comércio varejista especializado de eletrodomésticos e equipamentos de áudio e vídeo", cat: "CSI" },
 
-  // Alimentação & Bares (CSI / GRN)
-  "5611201": { desc: "Restaurantes e similares (Alimentação Silenciosa)", cat: "CSI" },
-  "5611203": { desc: "Lanchonetes, casas de chá, de sucos e similares", cat: "CSI" },
-  "5611204": { desc: "Bares e outros estabelecimentos especializados em servir bebidas, sem entretenimento", cat: "CSI" },
-  "5611205": { desc: "Bares e outros estabelecimentos de bebidas com entretenimento/música (Ruído Noturno)", cat: "GRN" },
+  // Alimentação & Bares (CSI / GRD / GRN)
+  "5611201": { desc: "Restaurantes e similares (Alimentação Silenciosa)", cat: "CSI", cat_noturno: "GRN", cat_porte: "PGTI" },
+  "5611203": { desc: "Lanchonetes, casas de chá, de sucos e similares", cat: "CSI", cat_noturno: "GRN", cat_porte: "PGTI" },
+  "5611204": { desc: "Bares e outros estabelecimentos especializados em servir bebidas, sem entretenimento", cat: "CSI", cat_noturno: "GRN", cat_porte: "PGTI" },
+  "5611205": { desc: "Bares e outros estabelecimentos especializados em servir bebidas, com entretenimento", cat: "GRD", cat_noturno: "GRN", cat_porte: "PGTI" },
   "9001902": { desc: "Produção musical e casas de espetáculos com música ao vivo (Shows)", cat: "GRN" },
 
   // Serviços e Apoio (SEAP / EVC)
@@ -560,9 +560,12 @@ async function analisarAtividadeCNAE(cnaeString) {
   if (isNaN(div)) return null;
 
   // Detecção específica para Bares com Entretenimento ou Recreação Noturna
-  if (clean.startsWith("5611205") || div === 90 || clean.startsWith("9329")) {
+  if (clean.startsWith("5611205")) {
+    cat = "GRD";
+    if (!desc) desc = "Bares e outros estabelecimentos especializados em servir bebidas, com entretenimento";
+  } else if (div === 90 || clean.startsWith("9329")) {
     cat = "GRN";
-    if (!desc) desc = "Bares, Espetáculos ou Recreação com Entretenimento Noturno (Gerador de Ruído)";
+    if (!desc) desc = "Espetáculos, Shows ou Recreação Noturna (Gerador de Ruído)";
   } else if (clean.startsWith("9313") || clean.startsWith("9319")) {
     cat = "GRD";
     if (!desc) desc = "Academias de ginástica ou centros esportivos de grande porte";
@@ -695,9 +698,13 @@ async function exibirResultado(data) {
     });
   }
 
+  // Variáveis para consolidação do Parecer Geral
+  let parecerConsolidado = data.parecer;
+  let justificativaConsolidada = data.justificativa;
+  let requisitosConsolidados = data.requisitos_legais ? [...data.requisitos_legais] : [];
+
   // --- CRUZAMENTO DINÂMICO DE CNAE COM O ZONEAMENTO ---
-  if (cnaeInput && cnaeInput.value.trim() && cnaeVerdictBox) {
-    const cnaeValue = cnaeInput.value.trim();
+  if (cnaeValor && cnaeVerdictBox) {
     cnaeVerdictBox.classList.remove("hidden");
     
     const cnaeBadge = document.getElementById("cnae-badge");
@@ -710,14 +717,15 @@ async function exibirResultado(data) {
     `;
     cnaeJustificativa.textContent = "Buscando descrição oficial da atividade...";
 
-    const atividade = await analisarAtividadeCNAE(cnaeValue);
+    const atividade = await analisarAtividadeCNAE(cnaeValor);
 
     if (atividade) {
       const cnaePermitidoNaZona = usosPermitidos.includes(atividade.cat);
 
       cnaeBadge.className = "cnae-badge";
       if (cnaePermitidoNaZona) {
-        if (data.parecer === "Necessita de Vistoria") {
+        if (data.parecer === "Necessita de Vistoria" || data.parecer === "Inapto") {
+          parecerConsolidado = data.parecer;
           cnaeBadge.classList.add("cnae-badge-vistoria");
           cnaeBadge.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-alert-triangle"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
@@ -725,6 +733,7 @@ async function exibirResultado(data) {
           `;
           cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE enquadrado em <strong>${atividade.cat}</strong>) é compatível com o zoneamento <strong>${zonaCodigo}</strong>, porém o local exige vistoria física prévia para liberação.`;
         } else {
+          parecerConsolidado = "Apto";
           cnaeBadge.classList.add("cnae-badge-apto");
           cnaeBadge.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
@@ -769,12 +778,18 @@ async function exibirResultado(data) {
           cnaeJustificativa.innerHTML += `<div style="margin-top:6px; padding:6px 10px; ${porteStyle} border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🏢 Alerta de Porte (Decreto 30.529/2025):</strong> ${porteMsg}</div>`;
         }
       } else {
+        parecerConsolidado = "Inapto";
         cnaeBadge.classList.add("cnae-badge-inapto");
         cnaeBadge.innerHTML = `
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
           Atividade Proibida
         `;
         cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE classificado em <strong>${atividade.cat}</strong>) é <strong>VEDADA</strong> para este zoneamento. A zona <strong>${zonaCodigo}</strong> não admite a categoria <strong>${atividade.cat}</strong> de acordo com a Seção II, Art. 118 da Lei 13.123/2025 e Decreto 30.529/2025.`;
+        justificativaConsolidada = `${zonaDesc} (${zonaCodigo}). A atividade consultada (${cnaeValor} - ${atividade.desc}) é VEDADA neste zoneamento por estar classificada na categoria ${atividade.cat} (Art. 118 da Lei 13.123/2025 e Decreto 30.529/2025).`;
+        requisitosConsolidados = [
+          `Atividade (CNAE ${cnaeValor}) incompatível com o zoneamento ${zonaCodigo}`,
+          "Vedada a concessão de alvará ou autorização de funcionamento para esta categoria neste endereço"
+        ];
       }
     } else {
       cnaeVerdictBox.classList.add("hidden");
@@ -783,10 +798,12 @@ async function exibirResultado(data) {
     if (cnaeVerdictBox) cnaeVerdictBox.classList.add("hidden");
   }
 
-  // Preenche a lista de requisitos municipais
+  // Atualiza a justificativa e os requisitos consolidados
+  document.getElementById("res-justificativa").textContent = justificativaConsolidada;
+
   reqList.innerHTML = "";
-  if (data.requisitos_legais && data.requisitos_legais.length > 0) {
-    data.requisitos_legais.forEach(req => {
+  if (requisitosConsolidados && requisitosConsolidados.length > 0) {
+    requisitosConsolidados.forEach(req => {
       const li = document.createElement("li");
       li.style.display = "flex";
       li.style.alignItems = "flex-start";
@@ -801,15 +818,15 @@ async function exibirResultado(data) {
     });
   }
 
-  // Estiliza o Badge do Parecer
+  // Estiliza o Badge do Parecer Consolidado
   badge.className = "badge";
-  if (data.parecer === "Apto") {
+  if (parecerConsolidado === "Apto") {
     badge.classList.add("badge-apto");
     badge.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
       Apto
     `;
-  } else if (data.parecer === "Inapto") {
+  } else if (parecerConsolidado === "Inapto") {
     badge.classList.add("badge-inapto");
     badge.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
