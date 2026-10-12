@@ -1,4 +1,3 @@
-// Glossário Legal e Regulatório de Comércio e Zoneamento - Sorocaba
 const TERMOS_GLOSSARIO = [
   {
     termo: "Ambulante",
@@ -196,63 +195,59 @@ const TERMOS_GLOSSARIO = [
 
 let categoriaAtual = 'todas';
 
-// Renderização dos cards
 function renderizarGlossario(termos) {
-  const container = document.getElementById("glossary-grid");
-  if (!container) return;
+  const container = document.getElementById('glossary-grid');
 
   if (termos.length === 0) {
     container.innerHTML = `
-      <div style="grid-column: 1 / -1; text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
-        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:1rem; opacity:0.5;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-        <p style="font-size: 1.1rem; font-weight: 600;">Nenhum termo localizado</p>
-        <p style="font-size: 0.9rem;">Tente pesquisar por palavras como "GRN", "calçada", "Decreto" ou "Sachê".</p>
+      <div class="glossary-vazio">
+        <strong>Nenhum termo localizado</strong>
+        <p>Tente pesquisar por palavras como "GRN", "calçada", "decreto" ou "sachê".</p>
       </div>
     `;
     return;
   }
 
-  container.innerHTML = termos.map(t => `
+  container.innerHTML = termos.map((t) => `
     <div class="term-card">
       <div class="term-header">
-        <h3 class="term-title">${t.termo}</h3>
-        <span class="term-badge">${t.categoria}</span>
+        <h3 class="term-title">${esc(t.termo)}</h3>
+        <span class="term-badge">${esc(t.categoria)}</span>
       </div>
-      <p class="term-desc">${t.descricao}</p>
-      <div class="term-base-legal">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11 3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-        <span>${t.baseLegal}</span>
-      </div>
+      <p class="term-desc">${esc(t.descricao)}</p>
+      <div class="term-base-legal">${esc(t.baseLegal)}</div>
     </div>
   `).join('');
 }
 
-// Filtro por texto e categoria
 function filtrarGlossario() {
-  const searchVal = (document.getElementById("glossary-search")?.value || "").toLowerCase().trim();
+  const busca = document.getElementById('glossary-search').value.toLowerCase().trim();
 
-  const filtrados = TERMOS_GLOSSARIO.filter(item => {
-    const bateCategoria = (categoriaAtual === 'todas') || (item.categoria.toLowerCase() === categoriaAtual.toLowerCase());
-    const bateTexto = !searchVal || 
-      item.termo.toLowerCase().includes(searchVal) || 
-      item.descricao.toLowerCase().includes(searchVal) || 
-      item.baseLegal.toLowerCase().includes(searchVal) ||
-      item.categoria.toLowerCase().includes(searchVal);
-    
+  const filtrados = TERMOS_GLOSSARIO.filter((item) => {
+    const bateCategoria = categoriaAtual === 'todas' || item.categoria.toLowerCase() === categoriaAtual.toLowerCase();
+    const bateTexto = !busca ||
+      item.termo.toLowerCase().includes(busca) ||
+      item.descricao.toLowerCase().includes(busca) ||
+      item.baseLegal.toLowerCase().includes(busca) ||
+      item.categoria.toLowerCase().includes(busca);
+
     return bateCategoria && bateTexto;
   });
 
   renderizarGlossario(filtrados);
 }
 
-// Alteração de categoria via botões
-function setFiltroCategoria(categoria, btnElement) {
-  categoriaAtual = categoria;
-  document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-  if (btnElement) btnElement.classList.add('active');
-  filtrarGlossario();
-}
+document.addEventListener('DOMContentLoaded', () => {
+  const botoes = document.querySelectorAll('.filter-btn');
 
-document.addEventListener("DOMContentLoaded", () => {
+  botoes.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      categoriaAtual = btn.dataset.categoria;
+      botoes.forEach((b) => b.classList.toggle('active', b === btn));
+      filtrarGlossario();
+    });
+  });
+
+  document.getElementById('glossary-search').addEventListener('input', filtrarGlossario);
   renderizarGlossario(TERMOS_GLOSSARIO);
 });

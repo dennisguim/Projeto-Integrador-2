@@ -2,8 +2,21 @@ let map;
 let marker;
 let tipoComercioSelecionado = "ambulante";
 let debounceTimeout;
+let ultimoPonto = null;
+let codigoConsultaAtual = "";
+let dataHoraConsultaAtual = "";
 
-// Dicionário de descrições completas dos usos (exibidos no tooltip/hover)
+const SOROCABA = [-23.5015, -47.4581];
+
+const ICONES = {
+  check: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`,
+  x: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`,
+  alerta: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
+  seta: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
+  info: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>`,
+  carregando: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>`
+};
+
 const DESCRICOES_USO = {
   RU: "Residencial Unifamiliar (casas térreas/sobrados isolados)",
   RM: "Residencial Multifamiliar (apartamentos e condomínio de casas)",
@@ -21,8 +34,6 @@ const DESCRICOES_USO = {
   UE: "Uso Especial (escolas, hospitais, cemitérios, infraestrutura, órgãos públicos)",
   AAP: "Atividades Agropastoris (Cultivos agrícolas, criação de animais, agronegócio e feiras de produtores)"
 };
-
-// Matriz de permissão do Art. 118 (Quadro 01) do Plano Diretor de Sorocaba (Lei 13.123/2025)
 const MAPEAMENTO_USOS = {
   ZC: ["RU", "RM", "RT", "RSI", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "TL", "UE"],
   ZPI: ["RU", "RM", "RT", "RSI", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "TL", "UE"],
@@ -44,10 +55,7 @@ const MAPEAMENTO_USOS = {
   ZRURAL: ["RU", "EVC", "PGTI", "PGTP", "CSI", "TL", "UAI", "UE", "AAP"],
   AEIP: ["CSI", "SEAP", "EVC", "UE"]
 };
-
-// Banco de dados local de CNAEs frequentes em Sorocaba (Decreto 30.529/2025) para correspondência rápida/offline
 const BANCO_CNAE = {
-  // Comércio Varejista (CSI / PGTI)
   "4781400": { desc: "Comércio varejista de artigos do vestuário e acessórios (Lojas de Roupas)", cat: "CSI" },
   "4711302": { desc: "Comércio varejista de mercadorias em geral (Supermercados)", cat: "PGTI" },
   "4721102": { desc: "Padaria e confeitaria com predominância de revenda", cat: "CSI" },
@@ -55,15 +63,11 @@ const BANCO_CNAE = {
   "4771701": { desc: "Comércio varejista de produtos farmacêuticos (Farmácias)", cat: "CSI" },
   "4789004": { desc: "Comércio varejista de animais vivos e de artigos para pet shop", cat: "CSI" },
   "4753900": { desc: "Comércio varejista especializado de eletrodomésticos e equipamentos de áudio e vídeo", cat: "CSI" },
-
-  // Alimentação & Bares (CSI / GRD / GRN)
   "5611201": { desc: "Restaurantes e similares (Alimentação Silenciosa)", cat: "CSI", cat_noturno: "GRN", cat_porte: "PGTI" },
   "5611203": { desc: "Lanchonetes, casas de chá, de sucos e similares", cat: "CSI", cat_noturno: "GRN", cat_porte: "PGTI" },
   "5611204": { desc: "Bares e outros estabelecimentos especializados em servir bebidas, sem entretenimento", cat: "CSI", cat_noturno: "GRN", cat_porte: "PGTI" },
   "5611205": { desc: "Bares e outros estabelecimentos especializados em servir bebidas, com entretenimento", cat: "GRD", cat_noturno: "GRN", cat_porte: "PGTI" },
   "9001902": { desc: "Produção musical e casas de espetáculos com música ao vivo (Shows)", cat: "GRN" },
-
-  // Serviços e Apoio (SEAP / EVC)
   "9602501": { desc: "Serviços de cabeleireiros, manicure, pedicure (Salões de Beleza)", cat: "SEAP" },
   "9602502": { desc: "Atividades de estética, barbearias e serviços de beleza", cat: "SEAP" },
   "8630503": { desc: "Atividade médica ambulatorial restrita a consultas (Clínicas Médicas)", cat: "SEAP" },
@@ -72,19 +76,13 @@ const BANCO_CNAE = {
   "6920601": { desc: "Atividades de contabilidade (Escritórios de Contabilidade)", cat: "SEAP" },
   "7020400": { desc: "Atividades de consultoria em gestão empresarial (Escritórios)", cat: "SEAP" },
   "6201500": { desc: "Desenvolvimento de programas de computador sob encomenda (TI / Coworking)", cat: "EVC" },
-
-  // Ruído Diurno (GRD)
   "4520001": { desc: "Serviços de manutenção e reparação mecânica de veículos automotores (Oficinas)", cat: "GRD" },
   "4520002": { desc: "Serviços de lanternagem ou funilaria e pintura de veículos automotores", cat: "GRD" },
   "9313100": { desc: "Academias de ginástica e centros esportivos (Ruído Diurno)", cat: "GRD" },
-
-  // Educação & Saúde (UE / SEAP)
   "8511200": { desc: "Educação infantil - creche (Creches e Berçários)", cat: "UE" },
   "8513900": { desc: "Ensino de idiomas e cursos livres", cat: "SEAP" },
   "8520100": { desc: "Ensino médio (Escolas Estaduais/Particulares)", cat: "UE" },
   "8610101": { desc: "Atividades de atendimento hospitalar (Hospitais)", cat: "UE" },
-
-  // Logística & Alta Incomodidade (PGTP / UAI / CSI)
   "4921301": { desc: "Transporte rodoviário coletivo de passageiros, com itinerário fixo, municipal (Linhas de Ônibus / Passageiros)", cat: "CSI" },
   "4923001": { desc: "Serviço de táxi", cat: "CSI" },
   "4923002": { desc: "Serviço de transporte de passageiros - locação de automóveis com motorista (Aplicativos / Uber)", cat: "CSI" },
@@ -92,8 +90,6 @@ const BANCO_CNAE = {
   "4744099": { desc: "Comércio varejista de materiais de construção em geral (Depósito de Materiais)", cat: "PGTP" },
   "4784900": { desc: "Comércio varejista de gás liquefeito de petróleo (Depósito de Gás GLP)", cat: "UAI" },
   "4731800": { desc: "Comércio varejista de combustíveis para veículos automotores (Postos de Gasolina)", cat: "UAI" },
-
-  // Turismo, Lazer & Agro (TL / AAP)
   "5510801": { desc: "Hotéis e pousadas (Hospedagem e Lazer)", cat: "TL" },
   "9321800": { desc: "Parques de diversão e parques temáticos (Recreação ao ar livre)", cat: "TL" },
   "0111301": { desc: "Cultivo de arroz (Atividade Agrícola)", cat: "AAP" },
@@ -101,24 +97,29 @@ const BANCO_CNAE = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
-  tipoComercioSelecionado = localStorage.getItem("last_tipo_comercio") || "ambulante";
-  setTipoComercio(tipoComercioSelecionado);
-
-  map = L.map("map").setView([-23.5015, -47.4581], 13);
+  map = L.map("map").setView(SOROCABA, 13);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: '© OpenStreetMap contributors | Prefeitura de Sorocaba',
-    crossOrigin: 'anonymous'
+    attribution: "© OpenStreetMap contributors | Prefeitura de Sorocaba",
+    crossOrigin: "anonymous"
   }).addTo(map);
+
+  setTipoComercio(localStorage.getItem("last_tipo_comercio") === "fixo" ? "fixo" : "ambulante");
+
+  document.querySelectorAll(".trade-option").forEach((btn) => {
+    btn.addEventListener("click", () => setTipoComercio(btn.dataset.tipo));
+  });
+  document.getElementById("search-btn").addEventListener("click", buscarEndereco);
+  document.getElementById("btn-print-doc").addEventListener("click", salvarOuImprimirPDF);
+  document.getElementById("btn-share-doc").addEventListener("click", compartilharLaudo);
 
   map.on("click", async (e) => {
     const lat = e.latlng.lat;
     const lng = e.latlng.lng;
 
-    let logradouro = "Ponto selecionado via mapa";
+    let logradouro = "Ponto selecionado no mapa";
     try {
-      const url = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`;
-      const resp = await fetch(url);
+      const resp = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`);
       if (resp.ok) {
         const geoData = await resp.json();
         if (geoData && geoData.features && geoData.features.length > 0) {
@@ -127,14 +128,13 @@ document.addEventListener("DOMContentLoaded", () => {
           const number = p.housenumber ? `, ${p.housenumber}` : "";
           const district = p.district || p.suburb ? ` - ${p.district || p.suburb}` : "";
           if (streetName) {
-            logradouro = `${streetName}${number}${district}, Sorocaba - SP`;
-            const addrInput = document.getElementById("address-input");
-            if (addrInput) addrInput.value = logradouro;
+            logradouro = `${streetName}${number}${district}, Sorocaba - SP`.slice(0, 200);
+            document.getElementById("address-input").value = logradouro;
           }
         }
       }
     } catch (err) {
-      console.warn("Geocodificação reversa indisponível no momento.");
+      console.warn("Geocodificação reversa indisponível.");
     }
 
     validarPonto(lat, lng, logradouro);
@@ -143,76 +143,62 @@ document.addEventListener("DOMContentLoaded", () => {
   const addressInput = document.getElementById("address-input");
   const suggestionsList = document.getElementById("suggestions-list");
 
-  if (addressInput && suggestionsList) {
-    addressInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        suggestionsList.classList.add("hidden");
-        buscarEndereco();
-      }
-    });
+  addressInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      suggestionsList.classList.add("hidden");
+      buscarEndereco();
+    }
+  });
 
-    addressInput.addEventListener("input", () => {
-      clearTimeout(debounceTimeout);
-      const query = addressInput.value.trim();
+  addressInput.addEventListener("input", () => {
+    clearTimeout(debounceTimeout);
+    const query = addressInput.value.trim();
 
-      if (query.length < 3) {
-        suggestionsList.innerHTML = "";
-        suggestionsList.classList.add("hidden");
-        return;
-      }
+    if (query.length < 3) {
+      suggestionsList.innerHTML = "";
+      suggestionsList.classList.add("hidden");
+      return;
+    }
 
-      debounceTimeout = setTimeout(() => {
-        carregarSugestoes(query);
-      }, 180);
-    });
+    debounceTimeout = setTimeout(() => carregarSugestoes(query), 180);
+  });
 
-    document.addEventListener("click", (e) => {
-      if (e.target !== addressInput && e.target !== suggestionsList && !suggestionsList.contains(e.target)) {
-        suggestionsList.classList.add("hidden");
-      }
-    });
-  }
-
-  // --- AUTOCOMPLETE DE CNAE POR CÓDIGO E POR NOME DA ATIVIDADE ---
   const cnaeInput = document.getElementById("cnae-input");
   const cnaeSuggestionsList = document.getElementById("cnae-suggestions-list");
   let debounceCnaeTimeout;
 
-  if (cnaeInput && cnaeSuggestionsList) {
-    cnaeInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        cnaeSuggestionsList.classList.add("hidden");
-        if (window.ultimoPontoConsultado) {
-          validarPonto(window.ultimoPontoConsultado.lat, window.ultimoPontoConsultado.lng, window.ultimoPontoConsultado.logradouro);
-        }
-      }
-    });
+  cnaeInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      cnaeSuggestionsList.classList.add("hidden");
+      revalidarUltimoPonto();
+    }
+  });
 
-    cnaeInput.addEventListener("input", () => {
-      clearTimeout(debounceCnaeTimeout);
-      const query = cnaeInput.value.trim();
+  cnaeInput.addEventListener("input", () => {
+    clearTimeout(debounceCnaeTimeout);
+    const query = cnaeInput.value.trim();
 
-      if (query.length < 2) {
-        cnaeSuggestionsList.innerHTML = "";
-        cnaeSuggestionsList.classList.add("hidden");
-        return;
-      }
+    if (query.length < 2) {
+      cnaeSuggestionsList.innerHTML = "";
+      cnaeSuggestionsList.classList.add("hidden");
+      return;
+    }
 
-      debounceCnaeTimeout = setTimeout(() => {
-        carregarSugestoesCNAE(query);
-      }, 250);
-    });
+    debounceCnaeTimeout = setTimeout(() => carregarSugestoesCNAE(query), 250);
+  });
 
-    document.addEventListener("click", (e) => {
-      if (e.target !== cnaeInput && e.target !== cnaeSuggestionsList && !cnaeSuggestionsList.contains(e.target)) {
-        cnaeSuggestionsList.classList.add("hidden");
-      }
-    });
-  }
+  document.addEventListener("click", (e) => {
+    if (e.target !== addressInput && !suggestionsList.contains(e.target)) {
+      suggestionsList.classList.add("hidden");
+    }
+    if (e.target !== cnaeInput && !cnaeSuggestionsList.contains(e.target)) {
+      cnaeSuggestionsList.classList.add("hidden");
+    }
+  });
 
-  // Verifica se há permalink por código ou parâmetro na URL
+  // link compartilhado: consulta.html?id=CNS-...
   const urlParams = new URLSearchParams(window.location.search);
   const codeParam = urlParams.get("id") || urlParams.get("code");
   if (codeParam) {
@@ -220,58 +206,67 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-async function carregarConsultaPorCodigo(code) {
-  try {
-    const response = await fetch(`http://localhost:8000/api/consulta/${encodeURIComponent(code)}`);
-    if (response.ok) {
-      const data = await response.json();
-      window.ultimoPontoConsultado = {
-        lat: data.latitude,
-        lng: data.longitude,
-        logradouro: data.logradouro
-      };
-      window.codigoConsultaAtual = data.codigo_consulta;
-      window.dataHoraConsultaAtual = data.data_hora;
+function marcarPonto(lat, lng, titulo, logradouro) {
+  if (marker) map.removeLayer(marker);
+  marker = L.marker([lat, lng]).addTo(map);
 
-      if (data.tipo_comercio) setTipoComercio(data.tipo_comercio);
-      if (data.cnae) {
-        const cnaeInp = document.getElementById("cnae-input");
-        if (cnaeInp) cnaeInp.value = data.cnae;
-      }
-      const addrInp = document.getElementById("address-input");
-      if (addrInp) addrInp.value = data.logradouro;
+  const popup = document.createElement("div");
+  popup.className = "popup-ponto";
+  const forte = document.createElement("strong");
+  forte.textContent = titulo;
+  popup.append(forte, document.createElement("br"), logradouro);
+  marker.bindPopup(popup).openPopup();
+}
 
-      if (map) {
-        map.setView([data.latitude, data.longitude], 17);
-        if (marker) map.removeLayer(marker);
-        marker = L.marker([data.latitude, data.longitude]).addTo(map);
-        marker.bindPopup(`<div style="font-size:0.85rem;"><strong>📍 Ponto Consultado</strong><br>${data.logradouro}</div>`).openPopup();
-      }
-
-      exibirResultado(data);
-    }
-  } catch (err) {
-    console.warn("Não foi possível carregar consulta salva via permalink.", err);
+function revalidarUltimoPonto() {
+  if (ultimoPonto) {
+    validarPonto(ultimoPonto.lat, ultimoPonto.lng, ultimoPonto.logradouro);
   }
 }
 
+async function carregarConsultaPorCodigo(code) {
+  try {
+    const response = await apiFetch(`/api/consulta/${encodeURIComponent(code)}`);
+    if (!response.ok) {
+      exibirToast("Consulta não encontrada. Confira o código do link.");
+      return;
+    }
+    const data = await response.json();
+    ultimoPonto = { lat: data.latitude, lng: data.longitude, logradouro: data.logradouro };
+    codigoConsultaAtual = data.codigo_consulta;
+    dataHoraConsultaAtual = data.data_hora;
+
+    if (data.tipo_comercio) setTipoComercio(data.tipo_comercio, false);
+    document.getElementById("cnae-input").value = data.cnae || "";
+    document.getElementById("address-input").value = data.logradouro;
+
+    map.setView([data.latitude, data.longitude], 17);
+    marcarPonto(data.latitude, data.longitude, "Ponto consultado", data.logradouro);
+
+    exibirResultado(data);
+  } catch (err) {
+    console.warn("Não foi possível carregar a consulta salva.", err);
+  }
+}
+
+function normalizar(str) {
+  return str ? str.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase() : "";
+}
+
 function carregarSugestoesCNAE(query) {
-  const cnaeSuggestionsList = document.getElementById("cnae-suggestions-list");
+  const lista = document.getElementById("cnae-suggestions-list");
   const cnaeInput = document.getElementById("cnae-input");
-  if (!cnaeSuggestionsList || typeof BANCO_DECRETO_30529 === "undefined") return;
+  if (typeof BANCO_DECRETO_30529 === "undefined") return;
 
-  const normalize = (str) =>
-    str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
-
-  const qClean = normalize(query);
+  const qClean = normalizar(query);
   const qCleanNum = query.replace(/[^0-9]/g, "");
 
   const matches = [];
   for (const key in BANCO_DECRETO_30529) {
     const item = BANCO_DECRETO_30529[key];
-    const fmtMatch = item.fmt && normalize(item.fmt).includes(qClean);
+    const fmtMatch = item.fmt && normalizar(item.fmt).includes(qClean);
     const keyMatch = qCleanNum && key.includes(qCleanNum);
-    const descMatch = item.desc && normalize(item.desc).includes(qClean);
+    const descMatch = item.desc && normalizar(item.desc).includes(qClean);
 
     if (fmtMatch || keyMatch || descMatch) {
       matches.push(item);
@@ -279,39 +274,41 @@ function carregarSugestoesCNAE(query) {
     if (matches.length >= 15) break;
   }
 
+  lista.innerHTML = "";
+
   if (matches.length === 0) {
-    cnaeSuggestionsList.innerHTML = `<div class="suggestion-item" style="font-size:0.83rem; color:var(--text-muted); cursor:default;">Nenhum CNAE ou atividade encontrada para "${query}"</div>`;
-    cnaeSuggestionsList.classList.remove("hidden");
+    const vazio = document.createElement("div");
+    vazio.className = "suggestion-item vazio";
+    vazio.textContent = `Nenhum CNAE ou atividade encontrada para "${query}"`;
+    lista.appendChild(vazio);
+    lista.classList.remove("hidden");
     return;
   }
 
-  cnaeSuggestionsList.innerHTML = "";
   matches.forEach((item) => {
     const div = document.createElement("div");
     div.className = "suggestion-item";
     div.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
-        <strong style="font-size:0.85rem; color:var(--primary-gold);">${item.fmt}</strong>
-        <span style="font-size:0.75rem; padding:2px 6px; background:rgba(255,255,255,0.1); border-radius:4px; color:var(--text-muted); font-weight:600;">${item.cat || 'CSI'}</span>
+      <div class="sug-cnae-topo">
+        <strong>${esc(item.fmt)}</strong>
+        <span>${esc(item.cat || "CSI")}</span>
       </div>
-      <div style="font-size:0.8rem; color:var(--text-main); margin-top:2px; line-height:1.2;">${item.desc}</div>
+      <div class="sug-cnae-desc">${esc(item.desc)}</div>
     `;
 
     div.addEventListener("click", () => {
       cnaeInput.value = item.fmt;
-      cnaeSuggestionsList.classList.add("hidden");
-      if (window.ultimoPontoConsultado) {
-        validarPonto(window.ultimoPontoConsultado.lat, window.ultimoPontoConsultado.lng, window.ultimoPontoConsultado.logradouro);
-      }
+      lista.classList.add("hidden");
+      revalidarUltimoPonto();
     });
 
-    cnaeSuggestionsList.appendChild(div);
+    lista.appendChild(div);
   });
 
-  cnaeSuggestionsList.classList.remove("hidden");
+  lista.classList.remove("hidden");
 }
 
-// Algoritmo de distância de Levenshtein para tolerância a erros de digitação (Fuzzy Search)
+// distância de edição, para a busca tolerar erros de digitação
 function levenshteinDistance(a, b) {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
@@ -334,32 +331,24 @@ function levenshteinDistance(a, b) {
   return matrix[b.length][a.length];
 }
 
-function normalizeAddressStr(str) {
-  return str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
-}
-
 async function carregarSugestoes(query) {
-  const suggestionsList = document.getElementById("suggestions-list");
-  if (!suggestionsList) return;
-
-  const qClean = normalizeAddressStr(query);
+  const qClean = normalizar(query);
   const results = [];
 
-  // 1. Busca Local Fuzzy Instantânea (0ms) no banco de Sorocaba (LOCAIS_SOROCABA)
   if (typeof LOCAIS_SOROCABA !== "undefined") {
-    LOCAIS_SOROCABA.forEach(item => {
-      const nameNorm = normalizeAddressStr(item.nome);
-      const bairroNorm = normalizeAddressStr(item.bairro);
-      const aliasNorm = (item.aliases || []).map(a => normalizeAddressStr(a));
+    LOCAIS_SOROCABA.forEach((item) => {
+      const nameNorm = normalizar(item.nome);
+      const bairroNorm = normalizar(item.bairro);
+      const aliasNorm = (item.aliases || []).map((a) => normalizar(a));
 
-      let matched = nameNorm.includes(qClean) || bairroNorm.includes(qClean) || aliasNorm.some(a => a.includes(qClean));
+      let matched = nameNorm.includes(qClean) || bairroNorm.includes(qClean) || aliasNorm.some((a) => a.includes(qClean));
 
       if (!matched && qClean.length >= 3) {
-        const qWords = qClean.split(/\s+/).filter(w => w.length >= 3);
+        const qWords = qClean.split(/\s+/).filter((w) => w.length >= 3);
         const targetWords = (nameNorm + " " + bairroNorm + " " + aliasNorm.join(" ")).split(/\s+/);
-        
-        matched = qWords.every(qw => 
-          targetWords.some(tw => tw.includes(qw) || levenshteinDistance(tw, qw) <= (qw.length > 5 ? 2 : 1))
+
+        matched = qWords.every((qw) =>
+          targetWords.some((tw) => tw.includes(qw) || levenshteinDistance(tw, qw) <= (qw.length > 5 ? 2 : 1))
         );
       }
 
@@ -375,45 +364,36 @@ async function carregarSugestoes(query) {
     });
   }
 
-  // Renderiza sugestões locais imediatamente (0ms de atraso visual)
+  // a base local responde na hora; o Photon complementa quando chegar
   renderizarSugestoesEnderecos(results.slice(0, 6));
 
-  // 2. Busca remota em paralelo via Photon API (Fuzzy OSM geocoder super rápido e sem bloqueio 403)
   try {
-    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query + " Sorocaba")}&lat=-23.5015&lon=-47.4581&limit=5`;
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query + " Sorocaba")}&lat=${SOROCABA[0]}&lon=${SOROCABA[1]}&limit=5`;
     const response = await fetch(url);
-    if (response.ok) {
-      const data = await response.json();
-      if (data && data.features) {
-        data.features.forEach(feat => {
-          const p = feat.properties;
-          if (p.city === "Sorocaba" || p.county === "Sorocaba" || p.state === "São Paulo" || !p.city) {
-            const title = p.name || p.street || query;
-            const details = [p.street, p.suburb, p.district, "Sorocaba - SP"].filter(Boolean).join(", ");
-            const coords = feat.geometry.coordinates; // [lon, lat]
-            
-            if (!results.some(r => Math.abs(r.lat - coords[1]) < 0.001 && Math.abs(r.lon - coords[0]) < 0.001)) {
-              results.push({
-                display_name: `${title}, ${details}`,
-                title: title,
-                details: details,
-                lat: coords[1],
-                lon: coords[0]
-              });
-            }
-          }
-        });
-        renderizarSugestoesEnderecos(results.slice(0, 6));
+    if (!response.ok) return;
+    const data = await response.json();
+    if (!data || !data.features) return;
+
+    data.features.forEach((feat) => {
+      const p = feat.properties;
+      if (p.city === "Sorocaba" || p.county === "Sorocaba" || p.state === "São Paulo" || !p.city) {
+        const title = p.name || p.street || query;
+        const details = [p.street, p.suburb, p.district, "Sorocaba - SP"].filter(Boolean).join(", ");
+        const [lon, lat] = feat.geometry.coordinates;
+
+        if (!results.some((r) => Math.abs(r.lat - lat) < 0.001 && Math.abs(r.lon - lon) < 0.001)) {
+          results.push({ display_name: `${title}, ${details}`, title, details, lat, lon });
+        }
       }
-    }
+    });
+    renderizarSugestoesEnderecos(results.slice(0, 6));
   } catch (error) {
-    console.warn("Consulta Photon externa ocupada. Exibindo resultados locais.", error);
+    console.warn("Photon indisponível, exibindo apenas resultados locais.");
   }
 }
 
 function renderizarSugestoesEnderecos(items) {
   const suggestionsList = document.getElementById("suggestions-list");
-  if (!suggestionsList) return;
 
   if (items.length === 0) {
     suggestionsList.classList.add("hidden");
@@ -421,17 +401,17 @@ function renderizarSugestoesEnderecos(items) {
   }
 
   suggestionsList.innerHTML = "";
-  items.forEach(item => {
+  items.forEach((item) => {
     const div = document.createElement("div");
     div.className = "suggestion-item";
-    div.innerHTML = `<strong>${item.title}</strong><span>${item.details}</span>`;
-    
+    div.innerHTML = `<strong>${esc(item.title)}</strong><span>${esc(item.details)}</span>`;
+
     div.addEventListener("click", () => {
       document.getElementById("address-input").value = item.display_name;
       suggestionsList.classList.add("hidden");
-      
+
       map.setView([item.lat, item.lon], 17);
-      validarPonto(item.lat, item.lon, item.display_name);
+      validarPonto(item.lat, item.lon, item.display_name.slice(0, 200));
     });
 
     suggestionsList.appendChild(div);
@@ -439,28 +419,20 @@ function renderizarSugestoesEnderecos(items) {
   suggestionsList.classList.remove("hidden");
 }
 
-function setTipoComercio(tipo) {
-  tipoComercioSelecionado = tipo;
-  localStorage.setItem("last_tipo_comercio", tipo);
-  
-  const optAmbulante = document.getElementById("opt-ambulante");
-  const optFixo = document.getElementById("opt-fixo");
+function setTipoComercio(tipo, revalidar = true) {
+  tipoComercioSelecionado = tipo === "fixo" ? "fixo" : "ambulante";
+  localStorage.setItem("last_tipo_comercio", tipoComercioSelecionado);
 
-  if (optAmbulante && optFixo) {
-    optAmbulante.classList.toggle("active", tipo === "ambulante");
-    optFixo.classList.toggle("active", tipo === "fixo");
-  }
+  document.getElementById("opt-ambulante").classList.toggle("active", tipoComercioSelecionado === "ambulante");
+  document.getElementById("opt-fixo").classList.toggle("active", tipoComercioSelecionado === "fixo");
 
-  if (marker) {
-    const latlng = marker.getLatLng();
-    validarPonto(latlng.lat, latlng.lng, "Reavaliação de modalidade");
-  }
+  if (revalidar) revalidarUltimoPonto();
 }
 
 async function buscarEndereco() {
-  const query = document.getElementById("address-input").value;
+  const query = document.getElementById("address-input").value.trim();
   if (!query) {
-    alert("Por favor, digite um endereço.");
+    exibirToast("Digite um endereço ou clique em um ponto do mapa.");
     return;
   }
 
@@ -475,56 +447,48 @@ async function buscarEndereco() {
       const lon = parseFloat(data[0].lon);
 
       map.setView([lat, lon], 17);
-      validarPonto(lat, lon, data[0].display_name);
+      validarPonto(lat, lon, String(data[0].display_name).slice(0, 200));
     } else {
-      alert("Endereço não localizado em Sorocaba. Tente detalhar melhor (ex: incluir número ou bairro).");
+      exibirToast("Endereço não localizado em Sorocaba. Tente incluir número ou bairro.");
     }
   } catch (error) {
     console.error("Erro na geocodificação:", error);
-    alert("Erro ao buscar endereço no servidor geocodificador.");
+    exibirToast("Não foi possível consultar o serviço de endereços.");
   }
 }
 
 async function validarPonto(lat, lng, logradouro) {
-  window.ultimoPontoConsultado = { lat, lng, logradouro };
-
-  if (marker) {
-    map.removeLayer(marker);
-  }
-
-  marker = L.marker([lat, lng]).addTo(map);
-  marker.bindPopup(`<div style="font-size:0.85rem;"><strong>📍 Ponto Selecionado</strong><br>${logradouro}</div>`).openPopup();
+  ultimoPonto = { lat, lng, logradouro };
+  marcarPonto(lat, lng, "Ponto selecionado", logradouro);
 
   try {
-    const cnaeVal = document.getElementById("cnae-input") ? document.getElementById("cnae-input").value.trim() : "";
-    const response = await fetch("http://localhost:8000/api/viabilidade", {
+    const response = await apiFetch("/api/viabilidade", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      dados: {
         latitude: lat,
         longitude: lng,
         logradouro: logradouro,
         tipo_comercio: tipoComercioSelecionado,
-        cnae: cnaeVal
-      })
+        cnae: document.getElementById("cnae-input").value.trim()
+      }
     });
 
     const data = await response.json();
-    if (data.codigo_consulta) {
-      window.codigoConsultaAtual = data.codigo_consulta;
-      window.dataHoraConsultaAtual = data.data_hora;
-      // Atualiza URL com permalink único sem recarregar a página
-      const newUrl = `${window.location.pathname}?id=${data.codigo_consulta}`;
-      window.history.replaceState(null, "", newUrl);
+    if (!response.ok) {
+      exibirToast(mensagemErro(response, data, "Não foi possível concluir a consulta."));
+      return;
     }
+
+    codigoConsultaAtual = data.codigo_consulta;
+    dataHoraConsultaAtual = data.data_hora;
+    window.history.replaceState(null, "", `${window.location.pathname}?id=${encodeURIComponent(data.codigo_consulta)}`);
     exibirResultado(data);
   } catch (error) {
     console.error("Erro ao consultar viabilidade:", error);
-    alert("Não foi possível conectar ao servidor backend (http://localhost:8000). Verifique se o FastAPI está rodando.");
+    exibirToast("Servidor indisponível no momento. Tente novamente em instantes.");
   }
 }
 
-// Analisa a atividade buscando a descrição exata na API do IBGE, se online
 async function analisarAtividadeCNAE(cnaeString) {
   const clean = cnaeString.replace(/[^0-9]/g, "");
   if (!clean) return null;
@@ -532,7 +496,6 @@ async function analisarAtividadeCNAE(cnaeString) {
   let desc = "";
   let cat = "";
 
-  // 1. Tenta correspondência exata na base completa do Decreto 30.529/2025 (1.334 CNAEs)
   if (typeof BANCO_DECRETO_30529 !== "undefined" && BANCO_DECRETO_30529[clean]) {
     return BANCO_DECRETO_30529[clean];
   }
@@ -541,7 +504,7 @@ async function analisarAtividadeCNAE(cnaeString) {
     return BANCO_CNAE[clean];
   }
 
-  // 2. Se não achou localmente, consulta dinamicamente os servidores oficiais do IBGE
+  // fora das bases locais, busca a descrição no IBGE e classifica pela divisão do CNAE
   try {
     const url = `https://servicodados.ibge.gov.br/api/v2/cnae/subclasses/${clean}`;
     const response = await fetch(url);
@@ -552,14 +515,12 @@ async function analisarAtividadeCNAE(cnaeString) {
       }
     }
   } catch (error) {
-    console.warn("Servidores do IBGE offline. Utilizando fallback local para classificação espacial.", error);
+    console.warn("API do IBGE indisponível, usando classificação local.");
   }
 
-  // 3. Fallback inteligente baseado nas Divisões CNAE (2 primeiros dígitos) para classificar o uso urbano
   const div = parseInt(clean.substring(0, 2));
   if (isNaN(div)) return null;
 
-  // Detecção específica para Bares com Entretenimento ou Recreação Noturna
   if (clean.startsWith("5611205")) {
     cat = "GRD";
     if (!desc) desc = "Bares e outros estabelecimentos especializados em servir bebidas, com entretenimento";
@@ -623,138 +584,114 @@ async function analisarAtividadeCNAE(cnaeString) {
   return { desc, cat };
 }
 
+function alertaCnae(classe, titulo, mensagemHtml) {
+  return `<div class="alerta-cnae ${classe}"><strong>${titulo}</strong> ${mensagemHtml}</div>`;
+}
+
 async function exibirResultado(data) {
   const resultCard = document.getElementById("result-card");
   const badge = document.getElementById("parecer-badge");
   const reqList = document.getElementById("res-requisitos");
   const usesContainer = document.getElementById("res-usos-permitidos");
-  const cnaeInput = document.getElementById("cnae-input");
   const cnaeVerdictBox = document.getElementById("cnae-verdict-box");
 
   resultCard.classList.remove("hidden");
   document.getElementById("res-tipo").textContent = data.tipo || (tipoComercioSelecionado === "ambulante" ? "Comércio Ambulante" : "Comércio Fixo");
-
-  const elCodigo = document.getElementById("res-codigo-consulta");
-  if (elCodigo) {
-    elCodigo.textContent = data.codigo_consulta || window.codigoConsultaAtual || "CNS-LOCAL";
-  }
-
-  const elLogradouro = document.getElementById("res-endereco-logradouro");
-  if (elLogradouro && (window.ultimoPontoConsultado || data.logradouro)) {
-    elLogradouro.textContent = (window.ultimoPontoConsultado ? window.ultimoPontoConsultado.logradouro : data.logradouro);
-  }
+  document.getElementById("res-codigo-consulta").textContent = data.codigo_consulta || codigoConsultaAtual;
+  document.getElementById("res-endereco-logradouro").textContent = ultimoPonto ? ultimoPonto.logradouro : (data.logradouro || "");
 
   const elCnaeRow = document.getElementById("res-cnae-row");
-  const elCnaeCodigo = document.getElementById("res-cnae-codigo");
-  const cnaeValor = (cnaeInput ? cnaeInput.value.trim() : "") || data.cnae || "";
-  if (cnaeValor && elCnaeRow && elCnaeCodigo) {
-    elCnaeCodigo.textContent = cnaeValor;
-    elCnaeRow.classList.remove("hidden");
-  } else if (elCnaeRow) {
-    elCnaeRow.classList.add("hidden");
-  }
+  const cnaeValor = document.getElementById("cnae-input").value.trim() || data.cnae || "";
+  document.getElementById("res-cnae-codigo").textContent = cnaeValor;
+  elCnaeRow.classList.toggle("hidden", !cnaeValor);
 
-  // Extrai e separa o código do zoneamento
   let zonaCodigo = "ZM";
   let zonaDesc = data.zona || "Zona Mista";
 
   if (data.zona) {
+    const zonaMin = data.zona.toLowerCase();
     if (data.zona.includes(" - ")) {
       const parts = data.zona.split(" - ");
       zonaCodigo = parts[0].trim();
       zonaDesc = parts[1].trim();
+    } else if (zonaMin.includes("mista")) {
+      zonaCodigo = "ZM";
+    } else if (zonaMin.includes("central")) {
+      zonaCodigo = "ZC";
+    } else if (zonaMin.includes("residencial 1") || zonaMin.includes("zr1")) {
+      zonaCodigo = "ZR1";
+    } else if (zonaMin.includes("preservação") || zonaMin.includes("zca")) {
+      zonaCodigo = "ZCA";
     } else {
-      if (data.zona.toLowerCase().includes("mista")) {
-        zonaCodigo = "ZM";
-      } else if (data.zona.toLowerCase().includes("central")) {
-        zonaCodigo = "ZC";
-      } else if (data.zona.toLowerCase().includes("residencial 1") || data.zona.toLowerCase().includes("zr1")) {
-        zonaCodigo = "ZR1";
-      } else if (data.zona.toLowerCase().includes("preservação") || data.zona.toLowerCase().includes("zca")) {
-        zonaCodigo = "ZCA";
-      } else {
-        zonaCodigo = data.zona.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, "");
-      }
+      zonaCodigo = data.zona.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, "");
     }
   }
 
-  // Preenche os campos separados no parecer
   document.getElementById("res-zona-codigo").textContent = zonaCodigo;
   document.getElementById("res-zona").textContent = zonaDesc;
   document.getElementById("res-justificativa").textContent = data.justificativa;
 
-  // Injeta as tags de usos permitidos de forma minimalista
-  const normalizedKey = zonaCodigo.toUpperCase().replace("-E", "EXP");
-  const usosPermitidos = MAPEAMENTO_USOS[normalizedKey] || ["CSI", "SEAP", "EVC", "UE"];
+  const usosPermitidos = MAPEAMENTO_USOS[zonaCodigo.toUpperCase().replace("-E", "EXP")] || ["CSI", "SEAP", "EVC", "UE"];
 
-  if (usesContainer) {
-    usesContainer.innerHTML = "";
-    usosPermitidos.forEach(uso => {
-      const span = document.createElement("span");
-      span.className = "use-tag";
-      span.textContent = uso;
-      span.title = DESCRICOES_USO[uso] || "Uso Urbano";
-      usesContainer.appendChild(span);
-    });
-  }
+  usesContainer.innerHTML = "";
+  usosPermitidos.forEach((uso) => {
+    const span = document.createElement("span");
+    span.className = "use-tag";
+    span.textContent = uso;
+    span.title = DESCRICOES_USO[uso] || "Uso urbano";
+    usesContainer.appendChild(span);
+  });
 
-  // Variáveis para consolidação do Parecer Geral
   let parecerConsolidado = data.parecer;
   let justificativaConsolidada = data.justificativa;
   let requisitosConsolidados = data.requisitos_legais ? [...data.requisitos_legais] : [];
 
-  // --- CRUZAMENTO DINÂMICO DE CNAE COM O ZONEAMENTO ---
-  if (cnaeValor && cnaeVerdictBox) {
-    cnaeVerdictBox.classList.remove("hidden");
-    
+  cnaeVerdictBox.classList.add("hidden");
+
+  if (cnaeValor) {
     const cnaeBadge = document.getElementById("cnae-badge");
     const cnaeJustificativa = document.getElementById("cnae-justificativa");
 
+    cnaeVerdictBox.classList.remove("hidden");
     cnaeBadge.className = "cnae-badge cnae-badge-vistoria";
-    cnaeBadge.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-2" style="animation: spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
-      <span>Consultando IBGE...</span>
-    `;
-    cnaeJustificativa.textContent = "Buscando descrição oficial da atividade...";
+    cnaeBadge.innerHTML = `${ICONES.carregando}<span>Consultando atividade...</span>`;
+    cnaeJustificativa.textContent = "Buscando a descrição oficial da atividade...";
 
     const atividade = await analisarAtividadeCNAE(cnaeValor);
 
-    if (atividade) {
-      const cnaePermitidoNaZona = usosPermitidos.includes(atividade.cat);
+    if (!atividade) {
+      cnaeVerdictBox.classList.add("hidden");
+    } else {
+      const desc = esc(atividade.desc);
+      const cat = esc(atividade.cat);
+      const zona = esc(zonaCodigo);
 
       cnaeBadge.className = "cnae-badge";
-      if (cnaePermitidoNaZona) {
+
+      if (usosPermitidos.includes(atividade.cat)) {
         if (data.parecer === "Necessita de Vistoria" || data.parecer === "Inapto") {
           parecerConsolidado = data.parecer;
           cnaeBadge.classList.add("cnae-badge-vistoria");
-          cnaeBadge.innerHTML = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-alert-triangle"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-            Vistoria Necessária
-          `;
-          cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE enquadrado em <strong>${atividade.cat}</strong>) é compatível com o zoneamento <strong>${zonaCodigo}</strong>, porém o local exige vistoria física prévia para liberação.`;
+          cnaeBadge.innerHTML = `${ICONES.alerta} Vistoria necessária`;
+          cnaeJustificativa.innerHTML = `A atividade <strong>${desc}</strong> (CNAE enquadrado em <strong>${cat}</strong>) é compatível com o zoneamento <strong>${zona}</strong>, porém o local exige vistoria física prévia para liberação.`;
         } else {
           parecerConsolidado = "Apto";
           cnaeBadge.classList.add("cnae-badge-apto");
-          cnaeBadge.innerHTML = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-            Atividade Permitida
-          `;
-          cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE enquadrado em <strong>${atividade.cat}</strong>) é <strong>totalmente compatível</strong> com o zoneamento <strong>${zonaCodigo}</strong> no horário diurno regular.`;
+          cnaeBadge.innerHTML = `${ICONES.check} Atividade permitida`;
+          cnaeJustificativa.innerHTML = `A atividade <strong>${desc}</strong> (CNAE enquadrado em <strong>${cat}</strong>) é compatível com o zoneamento <strong>${zona}</strong> no horário diurno regular.`;
         }
 
         if (atividade.cat_noturno) {
-          const noturnoPermitido = usosPermitidos.includes(atividade.cat_noturno);
-          const noturnoMsg = noturnoPermitido
-            ? `Se o estabelecimento operar entre <strong>22h e 06h</strong>, o enquadramento passa para <strong>${atividade.cat_noturno}</strong> (Gerador de Ruído Noturno).`
-            : `Se o estabelecimento operar entre <strong>22h e 06h</strong>, o enquadramento passa para <strong>${atividade.cat_noturno}</strong> e a atividade torna-se <strong>VEDADA</strong> no zoneamento ${zonaCodigo}.`;
-          const noturnoStyle = noturnoPermitido
-            ? `background:rgba(59, 130, 246, 0.1); border-left:3px solid var(--primary-gold);`
-            : `background:rgba(239, 68, 68, 0.1); border-left:3px solid var(--status-inapto);`;
-          cnaeJustificativa.innerHTML += `<div style="margin-top:8px; padding:6px 10px; ${noturnoStyle} border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🌙 Alerta Noturno (Decreto 30.529/2025):</strong> ${noturnoMsg}</div>`;
+          const noturno = esc(atividade.cat_noturno);
+          const permitido = usosPermitidos.includes(atividade.cat_noturno);
+          const msg = permitido
+            ? `Se o estabelecimento operar entre <strong>22h e 06h</strong>, o enquadramento passa para <strong>${noturno}</strong> (Gerador de Ruído Noturno).`
+            : `Se o estabelecimento operar entre <strong>22h e 06h</strong>, o enquadramento passa para <strong>${noturno}</strong> e a atividade torna-se <strong>vedada</strong> no zoneamento ${zona}.`;
+          cnaeJustificativa.innerHTML += alertaCnae(permitido ? "" : "alerta-vedado", "Funcionamento noturno (Decreto 30.529/2025):", msg);
         }
 
         if (atividade.cat_porte) {
-          let descMetragem = "Se a área construída/terreno for excedente ou abrigar frota de veículos";
+          let descMetragem = "Se a área construída ou do terreno exceder o limite da categoria, ou houver frota de veículos";
           if (atividade.conds_detalhe) {
             const d = atividade.conds_detalhe;
             const partes = [];
@@ -768,144 +705,94 @@ async function exibirResultado(data) {
             if (partes.length > 0) descMetragem = "Em caso de " + partes.join(" ou ");
           }
 
-          const portePermitido = usosPermitidos.includes(atividade.cat_porte);
-          const porteMsg = portePermitido
-            ? `${descMetragem}, o enquadramento passa para <strong>${atividade.cat_porte}</strong> (admitido no zoneamento ${zonaCodigo}).`
-            : `${descMetragem}, o enquadramento passa para <strong>${atividade.cat_porte}</strong> e a atividade torna-se <strong>INCOMPATÍVEL</strong> com o zoneamento ${zonaCodigo}.`;
-          const porteStyle = portePermitido
-            ? `background:rgba(245, 158, 11, 0.1); border-left:3px solid var(--status-vistoria);`
-            : `background:rgba(239, 68, 68, 0.1); border-left:3px solid var(--status-inapto);`;
-          cnaeJustificativa.innerHTML += `<div style="margin-top:6px; padding:6px 10px; ${porteStyle} border-radius:4px; font-size:0.82rem; color:var(--text-main);"><strong>🏢 Alerta de Porte (Decreto 30.529/2025):</strong> ${porteMsg}</div>`;
+          const porte = esc(atividade.cat_porte);
+          const permitido = usosPermitidos.includes(atividade.cat_porte);
+          const msg = permitido
+            ? `${descMetragem}, o enquadramento passa para <strong>${porte}</strong> (admitido no zoneamento ${zona}).`
+            : `${descMetragem}, o enquadramento passa para <strong>${porte}</strong> e a atividade torna-se <strong>incompatível</strong> com o zoneamento ${zona}.`;
+          cnaeJustificativa.innerHTML += alertaCnae(permitido ? "alerta-porte" : "alerta-vedado", "Porte do estabelecimento (Decreto 30.529/2025):", msg);
         }
       } else {
         parecerConsolidado = "Inapto";
         cnaeBadge.classList.add("cnae-badge-inapto");
-        cnaeBadge.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
-          Atividade Proibida
-        `;
-        cnaeJustificativa.innerHTML = `A atividade <strong>${atividade.desc}</strong> (CNAE classificado em <strong>${atividade.cat}</strong>) é <strong>VEDADA</strong> para este zoneamento. A zona <strong>${zonaCodigo}</strong> não admite a categoria <strong>${atividade.cat}</strong> de acordo com a Seção II, Art. 118 da Lei 13.123/2025 e Decreto 30.529/2025.`;
-        justificativaConsolidada = `${zonaDesc} (${zonaCodigo}). A atividade consultada (${cnaeValor} - ${atividade.desc}) é VEDADA neste zoneamento por estar classificada na categoria ${atividade.cat} (Art. 118 da Lei 13.123/2025 e Decreto 30.529/2025).`;
+        cnaeBadge.innerHTML = `${ICONES.x} Atividade proibida`;
+        cnaeJustificativa.innerHTML = `A atividade <strong>${desc}</strong> (CNAE classificado em <strong>${cat}</strong>) é <strong>vedada</strong> para este zoneamento. A zona <strong>${zona}</strong> não admite a categoria <strong>${cat}</strong>, de acordo com o Art. 118 da Lei 13.123/2025 e o Decreto 30.529/2025.`;
+        justificativaConsolidada = `${zonaDesc} (${zonaCodigo}). A atividade consultada (${cnaeValor} - ${atividade.desc}) é vedada neste zoneamento por estar classificada na categoria ${atividade.cat} (Art. 118 da Lei 13.123/2025 e Decreto 30.529/2025).`;
         requisitosConsolidados = [
           `Atividade (CNAE ${cnaeValor}) incompatível com o zoneamento ${zonaCodigo}`,
           "Vedada a concessão de alvará ou autorização de funcionamento para esta categoria neste endereço"
         ];
       }
-    } else {
-      cnaeVerdictBox.classList.add("hidden");
     }
-  } else {
-    if (cnaeVerdictBox) cnaeVerdictBox.classList.add("hidden");
   }
 
-  // Atualiza a justificativa e os requisitos consolidados
   document.getElementById("res-justificativa").textContent = justificativaConsolidada;
 
   reqList.innerHTML = "";
-  if (requisitosConsolidados && requisitosConsolidados.length > 0) {
-    requisitosConsolidados.forEach(req => {
-      const li = document.createElement("li");
-      li.style.display = "flex";
-      li.style.alignItems = "flex-start";
-      li.style.gap = "6px";
-      li.style.marginBottom = "6px";
-      
-      li.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right" style="flex-shrink:0; margin-top:2px; color:var(--primary-gold);"><polyline points="9 18 15 12 9 6"></polyline></svg>
-        <span>${req}</span>
-      `;
-      reqList.appendChild(li);
-    });
-  }
+  requisitosConsolidados.forEach((req) => {
+    const li = document.createElement("li");
+    li.innerHTML = ICONES.seta;
+    const texto = document.createElement("span");
+    texto.textContent = req;
+    li.appendChild(texto);
+    reqList.appendChild(li);
+  });
 
-  // Estiliza o Badge do Parecer Consolidado
   badge.className = "badge";
   if (parecerConsolidado === "Apto") {
     badge.classList.add("badge-apto");
-    badge.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-circle"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-      Apto
-    `;
+    badge.innerHTML = `${ICONES.check} Apto`;
   } else if (parecerConsolidado === "Inapto") {
     badge.classList.add("badge-inapto");
-    badge.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-circle"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
-      Inapto
-    `;
+    badge.innerHTML = `${ICONES.x} Inapto`;
   } else {
     badge.classList.add("badge-vistoria");
-    badge.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-alert-triangle"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-      Necessita Vistoria
-    `;
+    badge.innerHTML = `${ICONES.alerta} Necessita vistoria`;
   }
 }
 
-// ==========================================================================
-// FUNÇÕES DE LAUDO TÉCNICO, EXPORTAÇÃO PDF, IMPRESSÃO E COMPARTILHAMENTO
-// ==========================================================================
-
 function atualizarMetaImpressao() {
-  const p = window.ultimoPontoConsultado || { logradouro: "Sorocaba / SP" };
-  const elAddr = document.getElementById("res-endereco-logradouro");
-  if (elAddr) elAddr.textContent = p.logradouro;
-
-  const cod = window.codigoConsultaAtual || document.getElementById("res-codigo-consulta")?.textContent || "CNS-2026";
-  const dataFmt = window.dataHoraConsultaAtual || new Date().toLocaleString("pt-BR");
-
-  const elProto = document.getElementById("print-protocolo");
-  const elData = document.getElementById("print-data");
-  if (elProto) elProto.textContent = cod;
-  if (elData) elData.textContent = dataFmt;
+  const codigo = codigoConsultaAtual || document.getElementById("res-codigo-consulta").textContent;
+  document.getElementById("print-protocolo").textContent = codigo;
+  document.getElementById("print-data").textContent = dataHoraConsultaAtual || new Date().toLocaleString("pt-BR");
 }
 
 function salvarOuImprimirPDF() {
   atualizarMetaImpressao();
-  exibirToast("🖨️ Preparando laudo para salvar/imprimir...");
+  exibirToast("Preparando o laudo para salvar ou imprimir...");
 
-  if (map) {
-    map.invalidateSize();
-    if (marker) {
-      const latlng = marker.getLatLng();
-      map.setView(latlng, map.getZoom() || 16, { animate: false });
-    }
+  map.invalidateSize();
+  if (marker) {
+    map.setView(marker.getLatLng(), map.getZoom() || 16, { animate: false });
   }
 
-  setTimeout(() => {
-    window.print();
-  }, 300);
+  setTimeout(() => window.print(), 300);
 }
 
 async function compartilharLaudo() {
-  const p = window.ultimoPontoConsultado || { logradouro: "Sorocaba/SP" };
-  const codigo = window.codigoConsultaAtual || document.getElementById("res-codigo-consulta")?.textContent || "";
-  const parecer = document.getElementById("parecer-badge") ? document.getElementById("parecer-badge").innerText.trim() : "Consulta";
-  const zona = document.getElementById("res-zona-codigo") ? document.getElementById("res-zona-codigo").innerText.trim() : "Zoneamento";
+  const codigo = codigoConsultaAtual || document.getElementById("res-codigo-consulta").textContent;
+  const parecer = document.getElementById("parecer-badge").innerText.trim();
+  const zona = document.getElementById("res-zona-codigo").innerText.trim();
   const tipo = tipoComercioSelecionado === "ambulante" ? "Comércio Ambulante" : "Comércio Fixo";
-  
-  const permalinkUrl = window.location.href;
-  const textSummary = `📋 *Viabilidade Espacial - Sorocaba*\n🔍 Código da Consulta: ${codigo}\n📍 Endereço: ${p.logradouro}\n🏪 Modalidade: ${tipo}\n🗺️ Zoneamento: ${zona}\n📊 Parecer: ${parecer}\n\nLink direto da consulta: ${permalinkUrl}`;
+  const endereco = ultimoPonto ? ultimoPonto.logradouro : "Sorocaba/SP";
+
+  const link = window.location.href;
+  const resumo = `Viabilidade espacial - Sorocaba\nCódigo da consulta: ${codigo}\nEndereço: ${endereco}\nModalidade: ${tipo}\nZoneamento: ${zona}\nParecer: ${parecer}\n\nLink da consulta: ${link}`;
 
   if (navigator.share) {
     try {
-      await navigator.share({
-        title: `Viabilidade Espacial Sorocaba (${codigo})`,
-        text: textSummary,
-        url: permalinkUrl
-      });
-      exibirToast("📲 Compartilhado com sucesso!");
-      return;
+      await navigator.share({ title: `Viabilidade espacial Sorocaba (${codigo})`, text: resumo, url: link });
     } catch (e) {
-      if (e.name !== 'AbortError') console.error(e);
-      return;
+      if (e.name !== "AbortError") console.error(e);
     }
+    return;
   }
 
   try {
-    await navigator.clipboard.writeText(permalinkUrl);
-    exibirToast("📋 Link direto da consulta copiado para a área de transferência!");
+    await navigator.clipboard.writeText(link);
+    exibirToast("Link da consulta copiado para a área de transferência.");
   } catch (e) {
-    alert(textSummary);
+    window.prompt("Copie o link da consulta:", link);
   }
 }
 
@@ -914,14 +801,15 @@ function exibirToast(mensagem) {
   if (!toast) {
     toast = document.createElement("div");
     toast.className = "toast-notification";
+    toast.setAttribute("role", "status");
     document.body.appendChild(toast);
   }
-  toast.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
-    <span>${mensagem}</span>
-  `;
+  toast.innerHTML = ICONES.info;
+  const texto = document.createElement("span");
+  texto.textContent = mensagem;
+  toast.appendChild(texto);
+
   toast.classList.add("show");
-  setTimeout(() => {
-    toast.classList.remove("show");
-  }, 3500);
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove("show"), 3500);
 }
