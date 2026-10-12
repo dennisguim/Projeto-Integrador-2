@@ -1,9 +1,11 @@
 
 .python-version
 /.venv
-/backend/__pycache__
+__pycache__/
 *.md
 /leis
 /prints
 *.db
-backend/ambulante.db
+backend/.secret_key
+node_modules/
+/dist

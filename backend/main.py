@@ -1,44 +1,57 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel, Field
+from typing import Literal
 import models
+import security
 from database import engine, get_db
 from sqlalchemy.orm import Session
 import jwt
 import datetime
 import json
+import logging
 import os
 from shapely.geometry import shape, Point
 
-# Inicializar Tabelas no Banco de Dados
+log = logging.getLogger("uvicorn.error")
+
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="API Sistema de Viabilidade Comercial - Consulta Sorocaba")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+# a documentação automática expõe o mapa da API; só fica ligada com API_DOCS=1
+docs_ativos = os.environ.get("API_DOCS") == "1"
+app = FastAPI(
+    title="API Sistema de Viabilidade Comercial - Consulta Sorocaba",
+    docs_url="/docs" if docs_ativos else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if docs_ativos else None,
 )
 
-SECRET_KEY_SEMEPP = "sorocaba_secret_key_2025_lei_13123"
+# o CORS precisa ser registrado por último para envolver também as respostas 403/429 do middleware de proteção
+app.middleware("http")(security.protecao)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=security.ORIGENS_PERMITIDAS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
+    max_age=600,
+)
+
 GEOJSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "sorocaba_zoneamento.geojson")
 CORREDORES_GEOJSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "sorocaba_corredores.geojson")
 
-# Carregamento da Base de CNAEs do Decreto 30.529/2025
 CNAE_JSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "cnae_decreto_30529.json")
 banco_cnaes = {}
 if os.path.exists(CNAE_JSON_PATH):
     try:
         with open(CNAE_JSON_PATH, "r", encoding="utf-8") as f:
             banco_cnaes = json.load(f)
-        print(f"✅ Carregados {len(banco_cnaes)} CNAEs do Decreto 30.529/2025.")
+        log.info("Carregados %d CNAEs do Decreto 30.529/2025.", len(banco_cnaes))
     except Exception as e:
-        print(f"⚠️ Erro ao carregar JSON de CNAEs: {e}")
+        log.warning("Erro ao carregar JSON de CNAEs: %s", e)
 
-# Matriz de Usos Permitidos por Zona (Lei 13.123/2025, Art. 118)
+# Matriz de usos permitidos por zona (Lei 13.123/2025, Art. 118)
 MAPEAMENTO_USOS = {
     "ZC": ["RU", "RM", "RT", "RSI", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "TL", "UE"],
     "ZPI": ["RU", "RM", "RT", "RSI", "PGTI", "GRN", "GRD", "CSI", "SEAP", "EVC", "TL", "UE"],
@@ -61,7 +74,6 @@ MAPEAMENTO_USOS = {
     "AEIP": ["CSI", "SEAP", "EVC", "UE"]
 }
 
-# Carregamento da Base Espacial do Plano Diretor em Memória
 camada_zoneamento = []
 if os.path.exists(GEOJSON_PATH):
     try:
@@ -71,9 +83,9 @@ if os.path.exists(GEOJSON_PATH):
                 geom = shape(feature["geometry"])
                 props = feature.get("properties", {})
                 camada_zoneamento.append({"geometria": geom, "propriedades": props})
-        print(f"✅ Carregados {len(camada_zoneamento)} polígonos de zoneamento de Sorocaba.")
+        log.info("Carregados %d polígonos de zoneamento.", len(camada_zoneamento))
     except Exception as e:
-        print(f"⚠️ Erro ao carregar GeoJSON de zoneamento: {e}")
+        log.warning("Erro ao carregar GeoJSON de zoneamento: %s", e)
 
 camada_corredores = []
 if os.path.exists(CORREDORES_GEOJSON_PATH):
@@ -83,7 +95,7 @@ if os.path.exists(CORREDORES_GEOJSON_PATH):
             for feature in corredores_data.get("features", []):
                 line_geom = shape(feature["geometry"])
                 props = feature.get("properties", {})
-                # Buffer de ~150 metros (0.00135 graus em WGS84) ao redor do eixo do corredor
+                # faixa de ~150 m (0.00135 grau) em torno do eixo do corredor
                 buffer_geom = line_geom.buffer(0.00135)
                 camada_corredores.append({
                     "geometria_linha": line_geom,
@@ -91,20 +103,18 @@ if os.path.exists(CORREDORES_GEOJSON_PATH):
                     "sigla": props.get("sigla", "CCS2"),
                     "nome": props.get("nome", "Corredor Comercial e de Serviços")
                 })
-        print(f"✅ Carregados {len(camada_corredores)} eixos viários oficiais de corredores de Sorocaba.")
+        log.info("Carregados %d eixos de corredores.", len(camada_corredores))
     except Exception as e:
-        print(f"⚠️ Erro ao carregar GeoJSON de corredores: {e}")
+        log.warning("Erro ao carregar GeoJSON de corredores: %s", e)
 
-# Injeção Automática de Dados Iniciais no SQLite para Testes (Seeding)
+# Cadastro fictício usado nos testes da carteira e da fiscalização
 @app.on_event("startup")
 def startup_populate_db():
     db = Session(bind=engine)
     try:
-        # Garantir a remoção completa de dados antigos de produção/reais
         db.query(models.Ambulante).delete()
         db.commit()
 
-        # Inserção dos 10 Ambulantes Fictícios
         ambulantes_ficticios = [
             models.Ambulante(
                 nome="Carlos Augusto Pereira",
@@ -280,49 +290,55 @@ def startup_populate_db():
 
         db.add_all(ambulantes_ficticios)
         db.commit()
-        print("🌱 Banco SQLite limpo e populado com 10 ambulantes fictícios de Sorocaba com sucesso!")
+        log.info("Banco populado com %d ambulantes de teste.", len(ambulantes_ficticios))
     except Exception as e:
-        print(f"⚠️ Erro ao popular banco de dados: {e}")
+        log.warning("Erro ao popular banco de dados: %s", e)
     finally:
         db.close()
 
-# Pydantic Schemas
 class ConsultaRequest(BaseModel):
-    latitude: float
-    longitude: float
-    logradouro: str
-    tipo_comercio: str = "ambulante"
-    cnae: str = ""
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    logradouro: str = Field(min_length=1, max_length=200)
+    tipo_comercio: Literal["ambulante", "fixo"] = "ambulante"
+    cnae: str = Field(default="", max_length=80)
 
 class ValidarQRRequest(BaseModel):
-    token: str
+    token: str = Field(min_length=1, max_length=4096)
 
 class VistoriaRequest(BaseModel):
-    protocolo: str
-    fiscal_nome: str
-    largura_calcada: float
+    protocolo: str = Field(min_length=1, max_length=40)
+    fiscal_nome: str = Field(max_length=80)
+    largura_calcada: float = Field(ge=0, le=50)
     faixa_livre_ok: bool
     equipamento_ok: bool
-    observacoes: str
+    observacoes: str = Field(default="", max_length=1000)
 
 class AcessoCarteiraRequest(BaseModel):
-    cpf: str
-    data_nascimento: str
+    cpf: str = Field(min_length=11, max_length=14)
+    data_nascimento: str = Field(pattern=r"^\d{2}/\d{2}/\d{4}$")
 
 class FiscalLoginRequest(BaseModel):
-    usuario: str
-    senha: str
+    usuario: str = Field(min_length=1, max_length=60)
+    senha: str = Field(min_length=1, max_length=128)
 
-# Endpoints
 @app.get("/")
 def read_root():
     return {"message": "API Consulta Sorocaba online!"}
 
 @app.get("/status")
 def status_check():
-    return {"status": "ok", "versao": "1.4.0", "poligonos_carregados": len(camada_zoneamento)}
+    return {"status": "ok", "versao": "1.5.0", "poligonos_carregados": len(camada_zoneamento)}
 
-# Helper para gerar código da consulta (mashup do dia/hora + sequencial)
+@app.get("/robots.txt", response_class=PlainTextResponse)
+def robots():
+    return "User-agent: *\nDisallow: /\n"
+
+@app.get("/api/csrf")
+def obter_csrf():
+    return {"token": security.gerar_csrf()}
+
+# código da consulta: data/hora + sequencial do dia
 def gerar_codigo_consulta(db: Session):
     now = datetime.datetime.now()
     prefixo_data = now.strftime("%Y%m%d-%H%M")
@@ -331,7 +347,7 @@ def gerar_codigo_consulta(db: Session):
     codigo = f"CNS-{prefixo_data}-{count_hoje:04d}"
     return codigo, now.strftime("%d/%m/%Y %H:%M:%S")
 
-# Dicionário de Vias Estruturantes e Corredores Comerciais/Serviços (Lei 13.123/2025)
+# Vias estruturantes e corredores comerciais (Lei 13.123/2025)
 MAPA_CORREDORES_VIARIOS = {
     "itavuvu": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. Itavuvu)"),
     "ipanema": ("CCS2", "CCS2 - Corredor Comercial e de Serviços 2 (Av. Ipanema)"),
@@ -382,13 +398,12 @@ def obter_nome_oficial_zona(zona_str: str) -> str:
     if "AEIP" in z: return "Área Especial de Interesse Público"
     return "Zona Mista Urbana"
 
-# Endpoint de Viabilidade Espacial Cruzando Plano Diretor + Leis Municipais
 @app.post("/api/viabilidade")
 def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
     ponto = Point(req.longitude, req.latitude)
     zona_encontrada = None
 
-    # 1. Verifica se a coordenada está sobre a faixa de algum dos 334 Corredores Oficiais do mapa da Prefeitura
+    # corredores têm prioridade sobre a zona em que estão inseridos
     for item in camada_corredores:
         if item["geometria_buffer"].contains(ponto) or item["geometria_linha"].distance(ponto) < 0.00135:
             sigla = item["sigla"]
@@ -396,7 +411,7 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
             zona_encontrada = f"{sigla} - {nome_oficial}"
             break
 
-    # 2. Se não estiver no buffer espacial, verifica se o nome da rua informada está no dicionário de corredores
+    # fora da faixa do eixo, tenta pelo nome da via
     if not zona_encontrada:
         logr_rua = req.logradouro.lower().split(",")[0].split("-")[0].strip()
         for rua_chave, (sigla_c, nome_c) in MAPA_CORREDORES_VIARIOS.items():
@@ -404,7 +419,6 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
                 zona_encontrada = nome_c
                 break
 
-    # 3. Se não for corredor, realiza o cruzamento por coordenadas com os polígonos do QGIS
     if not zona_encontrada:
         for item in camada_zoneamento:
             if item["geometria"].contains(ponto):
@@ -482,7 +496,7 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
                 "Certidão de Uso e Ocupação do Solo"
             ]
 
-    # Cruzamento Dinâmico com CNAE se fornecido
+    # com CNAE informado, a categoria da atividade precisa constar nos usos da zona
     if req.cnae and req.cnae.strip():
         cnae_input_clean = req.cnae.strip()
         cnae_digits = "".join(filter(str.isdigit, cnae_input_clean))
@@ -526,7 +540,7 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
         db.add(nova_consulta)
         db.commit()
     except Exception as e:
-        print(f"⚠️ Erro ao persistir consulta no SQLite: {e}")
+        log.warning("Erro ao persistir consulta: %s", e)
         db.rollback()
 
     return {
@@ -540,7 +554,7 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
     }
 
 @app.get("/api/consulta/{codigo_consulta}")
-def buscar_consulta(codigo_consulta: str, db: Session = Depends(get_db)):
+def buscar_consulta(codigo_consulta: str = Path(pattern=r"^CNS-[0-9]{8}-[0-9]{4}-[0-9]{4,6}$"), db: Session = Depends(get_db)):
     c = db.query(models.Consulta).filter(models.Consulta.codigo_consulta == codigo_consulta).first()
     if not c:
         raise HTTPException(status_code=404, detail="Consulta não encontrada no banco de dados.")
@@ -559,44 +573,46 @@ def buscar_consulta(codigo_consulta: str, db: Session = Depends(get_db)):
         "requisitos_legais": json.loads(c.requisitos_json or "[]")
     }
 
-# Endpoint POST para validar acesso do ambulante sem senha
+def mascarar_cpf(cpf: str) -> str:
+    return f"***.{cpf[3:6]}.{cpf[6:9]}-**" if len(cpf) == 11 else "***"
+
+# o QR é lido por qualquer câmera, então o token leva o CPF mascarado
+def assinar_qr(ambulante) -> str:
+    payload_qr = {
+        "numero_autorizacao": ambulante.numero_autorizacao,
+        "titular": ambulante.nome,
+        "cpf": mascarar_cpf(ambulante.cpf),
+        "local": ambulante.local_autorizado,
+        "categoria": ambulante.categoria,
+        "produtos": ambulante.produtos,
+        "dias": ambulante.dias_autorizados,
+        "horario": ambulante.horario,
+        "termino": ambulante.termino,
+        "status": ambulante.status,
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=365)
+    }
+    return jwt.encode(payload_qr, security.SECRET_KEY, algorithm="HS256")
+
 @app.post("/api/carteira/acesso")
-def acessar_carteira(req: AcessoCarteiraRequest, db: Session = Depends(get_db)):
+def acessar_carteira(req: AcessoCarteiraRequest, request: Request, db: Session = Depends(get_db)):
     cpf_limpo = "".join(filter(str.isdigit, req.cpf))
-    
+    security.verificar_trava(request, cpf_limpo)
+
     ambulante = db.query(models.Ambulante).filter(
         models.Ambulante.cpf == cpf_limpo,
         models.Ambulante.data_nascimento == req.data_nascimento
     ).first()
-    
+
     if not ambulante:
+        security.registrar_falha(request, cpf_limpo)
         raise HTTPException(
-            status_code=404, 
+            status_code=404,
             detail="Ambulante não localizado. Verifique se o CPF e a Data de Nascimento foram digitados corretamente."
         )
-        
-    payload_qr = {
-        "numero_autorizacao": ambulante.numero_autorizacao,
-        "titular": ambulante.nome,
-        "cpf": ambulante.cpf,
-        "cnpj": ambulante.cnpj,
-        "local": ambulante.local_autorizado,
-        "categoria": ambulante.categoria,
-        "produtos": ambulante.produtos,
-        "observacao": ambulante.observacao_produtos,
-        "dias": ambulante.dias_autorizados,
-        "horario": ambulante.horario,
-        "inicio": ambulante.inicio,
-        "termino": ambulante.termino,
-        "processo": ambulante.processo_administrativo,
-        "status": ambulante.status,
-        "secretario": ambulante.secretario,
-        "prefeito": ambulante.prefeito,
-        "exp": (datetime.datetime.utcnow() + datetime.timedelta(days=365)).timestamp()
-    }
-    
-    token_assinado = jwt.encode(payload_qr, SECRET_KEY_SEMEPP, algorithm="HS256")
-    
+
+    security.registrar_sucesso(request, cpf_limpo)
+    token_assinado = assinar_qr(ambulante)
+
     return {
         "status": "sucesso",
         "dados": {
@@ -621,41 +637,23 @@ def acessar_carteira(req: AcessoCarteiraRequest, db: Session = Depends(get_db)):
         }
     }
 
-# Endpoint GET para retornar dados de carteira por CPF ou nº de Autorização
-@app.get("/api/carteira/{cpf_ou_protocolo}")
-def obter_carteira_digital(cpf_ou_protocolo: str, db: Session = Depends(get_db)):
+# consulta por CPF ou nº de autorização, restrita ao fiscal autenticado
+@app.get("/api/carteira/{cpf_ou_protocolo:path}")
+def obter_carteira_digital(cpf_ou_protocolo: str, db: Session = Depends(get_db), fiscal: dict = Depends(security.exigir_fiscal)):
+    if len(cpf_ou_protocolo) > 20:
+        raise HTTPException(status_code=404, detail="Autorização não localizada.")
     cpf_limpo = "".join(filter(str.isdigit, cpf_ou_protocolo))
-    
+
     ambulante = db.query(models.Ambulante).filter(
-        (models.Ambulante.cpf == cpf_limpo) | 
+        (models.Ambulante.cpf == cpf_limpo) |
         (models.Ambulante.numero_autorizacao == cpf_ou_protocolo)
     ).first()
-    
+
     if not ambulante:
         raise HTTPException(status_code=404, detail="Autorização não localizada.")
-        
-    payload_qr = {
-        "numero_autorizacao": ambulante.numero_autorizacao,
-        "titular": ambulante.nome,
-        "cpf": ambulante.cpf,
-        "cnpj": ambulante.cnpj,
-        "local": ambulante.local_autorizado,
-        "categoria": ambulante.categoria,
-        "produtos": ambulante.produtos,
-        "observacao": ambulante.observacao_produtos,
-        "dias": ambulante.dias_autorizados,
-        "horario": ambulante.horario,
-        "inicio": ambulante.inicio,
-        "termino": ambulante.termino,
-        "processo": ambulante.processo_administrativo,
-        "status": ambulante.status,
-        "secretario": ambulante.secretario,
-        "prefeito": ambulante.prefeito,
-        "exp": (datetime.datetime.utcnow() + datetime.timedelta(days=365)).timestamp()
-    }
-    
-    token_assinado = jwt.encode(payload_qr, SECRET_KEY_SEMEPP, algorithm="HS256")
-    
+
+    token_assinado = assinar_qr(ambulante)
+
     return {
         "status": ambulante.status,
         "protocolo": ambulante.numero_autorizacao,
@@ -676,34 +674,42 @@ def obter_carteira_digital(cpf_ou_protocolo: str, db: Session = Depends(get_db))
         "qr_token": token_assinado
     }
 
-# Endpoint POST para Login de Fiscal de Posturas
 @app.post("/api/fiscal/login")
-def fiscal_login(req: FiscalLoginRequest):
-    if req.usuario == "fiscal" and req.senha == "sorocaba2026":
-        return {
-            "status": "sucesso",
-            "token": "SOROCABA_FISCAL_SECURE_TOKEN_2026",
-            "fiscal_nome": "Carlos Eduardo"
-        }
-    raise HTTPException(status_code=401, detail="Usuário ou senha inválidos.")
+def fiscal_login(req: FiscalLoginRequest, request: Request):
+    security.verificar_trava(request, req.usuario)
+    if not security.autenticar_fiscal(req.usuario, req.senha):
+        security.registrar_falha(request, req.usuario)
+        raise HTTPException(status_code=401, detail="Usuário ou senha inválidos.")
+    security.registrar_sucesso(request, req.usuario)
+    return {
+        "status": "sucesso",
+        "token": security.emitir_token_fiscal(),
+        "fiscal_nome": security.FISCAL_NOME
+    }
 
-# Endpoint GET para busca de permissionários cadastrados no SQLite
+def escapar_like(texto: str) -> str:
+    return texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
 @app.get("/api/fiscal/busca")
-def fiscal_busca(query: str = "", db: Session = Depends(get_db)):
+def fiscal_busca(
+    query: str = Query(min_length=2, max_length=60),
+    db: Session = Depends(get_db),
+    fiscal: dict = Depends(security.exigir_fiscal)
+):
     query_limpa = "".join(filter(str.isdigit, query))
-    
+    termo = f"%{escapar_like(query.strip())}%"
+
     if query_limpa:
-        # Se contiver números, busca por CPF ou número de Autorização (TAU)
+        # com dígitos, busca por CPF ou número da autorização (TAU)
         resultados = db.query(models.Ambulante).filter(
             (models.Ambulante.cpf.like(f"%{query_limpa}%")) |
-            (models.Ambulante.numero_autorizacao.like(f"%{query}%"))
-        ).all()
+            (models.Ambulante.numero_autorizacao.like(termo, escape="\\"))
+        ).limit(50).all()
     else:
-        # Senão, busca por correspondência aproximada no Nome
         resultados = db.query(models.Ambulante).filter(
-            models.Ambulante.nome.like(f"%{query}%")
-        ).all()
-        
+            models.Ambulante.nome.like(termo, escape="\\")
+        ).limit(50).all()
+
     return {
         "resultados": [
             {
@@ -729,33 +735,25 @@ def fiscal_busca(query: str = "", db: Session = Depends(get_db)):
         ]
     }
 
-# Validação do Token do QR Code do Permissionário
 @app.post("/api/fiscal/validar-qr")
-def validar_qr_code(req: ValidarQRRequest):
+def validar_qr_code(req: ValidarQRRequest, fiscal: dict = Depends(security.exigir_fiscal)):
     try:
-        decoded = jwt.decode(req.token, SECRET_KEY_SEMEPP, algorithms=["HS256"])
-        return {
-            "valido": True,
-            "mensagem": "AUTORIZAÇÃO AUTÊNTICA E VÁLIDA",
-            "dados": decoded
-        }
+        decoded = jwt.decode(req.token, security.SECRET_KEY, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=400, detail="Licença expirada.")
     except jwt.InvalidTokenError:
-        if req.token == "SOROCABA_OFFLINE_TOKEN_DEMO_2026":
-            return {
-                "valido": True,
-                "mensagem": "AUTORIZAÇÃO DEMO OFFLINE VÁLIDA",
-                "dados": {
-                    "titular": "João Carlos da Silva (Modo Demo)",
-                    "protocolo": "AMB-2026/0482",
-                    "ponto": "Praça Coronel Fernando Prestes - Centro"
-                }
-            }
         raise HTTPException(status_code=400, detail="QR Code inválido ou adulterado!")
+    if "numero_autorizacao" not in decoded:
+        raise HTTPException(status_code=400, detail="QR Code inválido ou adulterado!")
+    decoded.pop("exp", None)
+    return {
+        "valido": True,
+        "mensagem": "AUTORIZAÇÃO AUTÊNTICA E VÁLIDA",
+        "dados": decoded
+    }
 
 @app.post("/api/fiscal/vistoria")
-def registrar_vistoria(req: VistoriaRequest):
+def registrar_vistoria(req: VistoriaRequest, fiscal: dict = Depends(security.exigir_fiscal)):
     return {
         "status": "sucesso",
         "mensagem": f"Vistoria do protocolo {req.protocolo} registrada com sucesso!",
