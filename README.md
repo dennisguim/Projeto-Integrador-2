@@ -41,7 +41,7 @@ Principais recursos:
 ### 1. Clonar o repositório
 
 ```bash
-git clone https://github.com/seu-usuario/Projeto-Integrador-2.git
+git clone https://github.com/dennisguim/Projeto-Integrador-2.git
 cd Projeto-Integrador-2
 ```
 
@@ -58,7 +58,8 @@ pip install -r backend/requirements.txt
 Iniciar o servidor da API:
 
 ```bash
-uvicorn backend.main:app --reload --port 8000
+cd backend
+uvicorn main:app --reload --port 8000 --no-server-header
 ```
 
 O backend estará ativo em `http://localhost:8000`.
@@ -71,13 +72,44 @@ Em outro terminal, inicie um servidor web simples para a pasta do frontend:
 python3 -m http.server 5500 --directory frontend
 ```
 
-Abra o navegador no endereço `http://localhost:5500`.
+Abra o navegador no endereço `http://localhost:5500`. Abrir os arquivos direto pelo disco (`file://`) não funciona: a API só aceita requisições vindas das origens liberadas.
+
+### 4. Gerar a versão de publicação (opcional)
+
+```bash
+npm install
+npm run build
+```
+
+O comando cria a pasta `dist/` com o JavaScript ofuscado e o CSS minificado. Em produção publica-se apenas essa pasta.
+
+---
+
+## Segurança
+
+- **CORS e origem**: a API só responde às origens listadas em `ALLOWED_ORIGINS` (padrão: `http://localhost:5500,http://127.0.0.1:5500`).
+- **CSRF**: toda requisição de escrita precisa do cabeçalho `X-CSRF-Token`, obtido em `GET /api/csrf` e válido por 2 horas.
+- **Limite de requisições**: 120 por minuto por IP; 8 por minuto nas rotas de login.
+- **Fiscalização**: o login devolve um token assinado com validade de 8 horas, exigido nas rotas `/api/fiscal/*` e na consulta de carteira por CPF.
+- **Varreduras**: ferramentas de scan conhecidas (pelo User-Agent), caminhos típicos de sondagem (`/.env`, `/wp-admin`, `*.php`...) e tentativas de injeção na URL recebem 403 e o IP fica bloqueado por 15 minutos. O `robots.txt` orienta os rastreadores legítimos; quem ignora o arquivo cai nesse bloqueio.
+- **Documentação da API** (`/docs`): desligada por padrão. Para ligar em desenvolvimento, `API_DOCS=1`.
+
+Variáveis de ambiente para produção:
+
+| Variável | Uso |
+| --- | --- |
+| `SECRET_KEY` | Chave de assinatura dos tokens. Sem ela, uma chave é gerada em `backend/.secret_key`. |
+| `ALLOWED_ORIGINS` | Endereços do frontend autorizados, separados por vírgula. |
+| `FISCAL_USUARIO`, `FISCAL_SENHA_HASH` | Credencial do fiscal. O hash é gerado com `python -c "import security; print(security.gerar_hash_senha('senha'))"` dentro de `backend/`. |
+
+O bloqueio por IP e o limite de requisições ficam em memória, o que atende um único processo. Atrás de proxy reverso ou com vários processos, essa parte deve ir para o proxy/WAF.
 
 ---
 
 ## Estrutura de arquivos
 
 - `backend/main.py`: Código da API REST e cálculo de viabilidade espacial.
+- `backend/security.py`: CSRF, limite de requisições, bloqueio de varreduras e autenticação do fiscal.
 - `data/sorocaba_zoneamento.geojson`: Polígonos de zoneamento urbano de Sorocaba.
 - `data/cnae_decreto_30529.json`: Base de dados com os 1.334 CNAEs do Decreto 30.529/2025.
 - `frontend/index.html`: Página inicial da plataforma.

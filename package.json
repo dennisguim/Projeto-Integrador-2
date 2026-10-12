@@ -1,0 +1,12 @@
+{
+  "name": "consulta-sorocaba",
+  "version": "1.5.0",
+  "private": true,
+  "description": "Consulta de viabilidade urbanística de Sorocaba - build de publicação do frontend",
+  "scripts": {
+    "build": "node tools/build.js"
+  },
+  "devDependencies": {
+    "javascript-obfuscator": "^4.1.1"
+  }
+}
