@@ -30,7 +30,7 @@ Principais recursos:
 
 ## Tecnologias utilizadas
 
-- Backend: Python 3.10, FastAPI, Shapely e Uvicorn.
+- Backend: Python 3.11, FastAPI, Shapely, SQLAlchemy e Uvicorn.
 - Frontend: HTML5, CSS3 e JavaScript.
 - Mapas e geocodificação: Leaflet.js e Photon API (OpenStreetMap).
 
@@ -51,7 +51,8 @@ Criar o ambiente virtual e instalar as dependências:
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate          # Linux/macOS
+.venv\Scripts\Activate.ps1         # Windows (PowerShell)
 pip install -r backend/requirements.txt
 ```
 
@@ -104,6 +105,19 @@ Variáveis de ambiente para produção:
 
 O bloqueio por IP e o limite de requisições ficam em memória, o que atende um único processo. Atrás de proxy reverso ou com vários processos, essa parte deve ir para o proxy/WAF.
 
+### Testes de segurança
+
+A API passou por revisão de código, análise estática, verificação de dependências e simulação de ataques. A metodologia, os resultados, as falhas corrigidas e os riscos que ainda precisam ser tratados antes de uma implantação na prefeitura estão em [`docs/SEGURANCA.md`](docs/SEGURANCA.md).
+
+Para repetir os testes (com o ambiente virtual ativo):
+
+```bash
+python tests/seguranca/regressao_api.py   # 31 verificações de validação, autenticação e CSRF
+python tests/seguranca/ataques.py         # 27 ataques simulados: scanners, injeção, força bruta
+```
+
+Cada script sobe uma cópia isolada da API na porta 8010, com banco temporário, e não interfere no servidor de desenvolvimento.
+
 ---
 
 ## Estrutura de arquivos
@@ -117,9 +131,31 @@ O bloqueio por IP e o limite de requisições ficam em memória, o que atende um
 - `frontend/carteira.html`: Tela da carteira digital.
 - `frontend/Fiscal.html`: Área de fiscalização e leitura de QR Code.
 - `frontend/glossario.html`: Tela com os termos legais e decretos.
+- `tests/seguranca/`: Testes automatizados de segurança da API.
+- `tools/build.js`: Geração da versão de publicação (`dist/`).
+- `docs/SEGURANCA.md`: Relatório dos testes de segurança.
 
 ---
 
 ## Projeto Integrador
 
-Trabalho desenvolvido para a disciplina de Projeto Integrador em Computação II do curso de Engenharia / Bacharelado em Computação da Universidade Virtual do Estado de São Paulo (UNIVESP).
+Trabalho desenvolvido em grupo para a disciplina de Projeto Integrador em Computação II (PJI240) do Eixo de Computação da Universidade Virtual do Estado de São Paulo (UNIVESP), com foco na Secretaria de Planejamento e Desenvolvimento Urbano de Sorocaba (SEPLAN).
+
+**Orientadora:** Profª. Mayla de Almeida
+**Polos:** Sorocaba, Tietê e Itapetininga - SP
+
+### Equipe
+
+O sistema é obra coletiva do grupo. Todos os integrantes participaram do desenvolvimento e são coautores do projeto:
+
+- Anderson Dias Machado
+- Dennis Rinaldim Barbosa Guimarães
+- Mateus Kenji Sakashita
+- Patricia Aparecida Saito Machado
+- Roberta Luz Rabelo Pinheiro
+
+O histórico de contribuições de cada integrante pode ser consultado nos commits do repositório.
+
+### Licença
+
+O uso do código segue os termos de [`LICENSE.md`](LICENSE.md). Os direitos autorais pertencem, em conjunto, aos integrantes da equipe listados acima.
