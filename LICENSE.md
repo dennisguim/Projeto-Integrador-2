@@ -4,7 +4,7 @@
 **DETENTORES DOS DIREITOS AUTORAIS (AUTORES, EM COAUTORIA):**  
 * Anderson Dias Machado  
 * Dennis Rinaldim Barbosa Guimarães (GitHub: [dennisguim](https://github.com/dennisguim) / E-mail: drinaldim@gmail.com)  
-* Mateus Kenji Sakashita  
+* Mateus Kenji Sakashita (GitHub: [mateuskenji11-sudo](https://github.com/mateuskenji11-sudo) / E-mail: mateussakashita@hotmail.com)  
 * Patricia Aparecida Saito Machado  
 * Roberta Luz Rabelo Pinheiro  
 
