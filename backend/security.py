@@ -51,6 +51,8 @@ FISCAL_SENHA_HASH = os.environ.get(
 FISCAL_NOME = os.environ.get("FISCAL_NOME", "Carlos Eduardo")
 PBKDF2_ITERACOES = 200_000
 SESSAO_FISCAL_HORAS = 8
+# separa o token de sessão do fiscal do token do QR, que usam a mesma chave
+AUD_FISCAL = "consulta-sorocaba:fiscal"
 
 CSRF_VALIDADE = 2 * 60 * 60
 METODOS_SEGUROS = {"GET", "HEAD", "OPTIONS"}
@@ -214,6 +216,7 @@ def emitir_token_fiscal() -> str:
         "sub": FISCAL_USUARIO,
         "nome": FISCAL_NOME,
         "papel": "fiscal",
+        "aud": AUD_FISCAL,
         "iat": agora,
         "exp": agora + datetime.timedelta(hours=SESSAO_FISCAL_HORAS),
     }
@@ -225,7 +228,7 @@ def exigir_fiscal(authorization: str = Header(default="")):
     if esquema.lower() != "bearer" or not token:
         raise HTTPException(status_code=401, detail="Sessão de fiscal não informada.")
     try:
-        dados = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        dados = jwt.decode(token, SECRET_KEY, algorithms=["HS256"], audience=AUD_FISCAL)
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Sessão expirada. Faça login novamente.")
     if dados.get("papel") != "fiscal":
@@ -282,6 +285,7 @@ def _origem_permitida(request: Request) -> bool:
 
 
 NEGADO = {"detail": "Acesso negado."}
+CORPO_MAXIMO = 16 * 1024
 
 
 async def protecao(request: Request, call_next):
@@ -293,6 +297,12 @@ async def protecao(request: Request, call_next):
     if motivo:
         _bloquear(ip, motivo)
         return JSONResponse(status_code=403, content=NEGADO)
+
+    tamanho = request.headers.get("content-length")
+    if tamanho and (not tamanho.isdigit() or int(tamanho) > CORPO_MAXIMO):
+        return JSONResponse(status_code=413, content={"detail": "Requisição grande demais."})
+    if request.method == "POST" and not tamanho:
+        return JSONResponse(status_code=411, content={"detail": "Tamanho da requisição não informado."})
 
     if request.method != "OPTIONS":
         espera = _excedeu_limite(ip, request.url.path)

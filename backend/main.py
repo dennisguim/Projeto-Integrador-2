@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException, Depends, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, Field
-from typing import Literal
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, PlainTextResponse
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from typing import Annotated, Literal
 import models
 import security
 from database import engine, get_db
@@ -12,7 +13,9 @@ import datetime
 import json
 import logging
 import os
-from shapely.geometry import shape, Point
+import secrets
+import unicodedata
+from shapely.geometry import box, shape, Point
 
 log = logging.getLogger("uvicorn.error")
 
@@ -37,6 +40,16 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
     max_age=600,
 )
+
+# a resposta padrão do FastAPI devolve o valor recebido; aqui só vão o campo e o motivo.
+# Isso evita repetir dados do usuário e o erro 500 quando o valor nem cabe em JSON (NaN).
+@app.exception_handler(RequestValidationError)
+async def erro_de_validacao(request: Request, exc: RequestValidationError):
+    erros = [
+        {"campo": ".".join(str(p) for p in e.get("loc", ())[1:]) or "corpo", "motivo": e.get("msg", "valor inválido")}
+        for e in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": "Dados inválidos na requisição.", "erros": erros[:10]})
 
 GEOJSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "sorocaba_zoneamento.geojson")
 CORREDORES_GEOJSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "sorocaba_corredores.geojson")
@@ -86,6 +99,10 @@ if os.path.exists(GEOJSON_PATH):
         log.info("Carregados %d polígonos de zoneamento.", len(camada_zoneamento))
     except Exception as e:
         log.warning("Erro ao carregar GeoJSON de zoneamento: %s", e)
+
+# área coberta pelo mapa de zoneamento, com folga de ~1 km; serve para recusar pontos de outras cidades
+LIMITE_MUNICIPIO = box(-47.580, -23.600, -47.293, -23.339)
+DISTANCIA_NOME_VIA = 0.0045  # ~450 m
 
 camada_corredores = []
 if os.path.exists(CORREDORES_GEOJSON_PATH):
@@ -296,29 +313,41 @@ def startup_populate_db():
     finally:
         db.close()
 
-class ConsultaRequest(BaseModel):
-    latitude: float = Field(ge=-90, le=90)
-    longitude: float = Field(ge=-180, le=180)
-    logradouro: str = Field(min_length=1, max_length=200)
+def limpar_texto(valor: str) -> str:
+    # tira caracteres de controle e invisíveis (Cc/Cf) e espaços repetidos antes de gravar
+    valor = "".join(c for c in valor if unicodedata.category(c) not in ("Cc", "Cf") or c == " ")
+    return " ".join(valor.split())
+
+Texto = Annotated[str, AfterValidator(limpar_texto)]
+
+# campos que a API não conhece são recusados, em vez de ignorados em silêncio
+class Entrada(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+class ConsultaRequest(Entrada):
+    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
+    logradouro: Texto = Field(min_length=1, max_length=200)
     tipo_comercio: Literal["ambulante", "fixo"] = "ambulante"
-    cnae: str = Field(default="", max_length=80)
+    cnae: Texto = Field(default="", max_length=80)
 
-class ValidarQRRequest(BaseModel):
-    token: str = Field(min_length=1, max_length=4096)
+class ValidarQRRequest(Entrada):
+    token: str = Field(min_length=1, max_length=4096, pattern=r"^[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+$")
 
-class VistoriaRequest(BaseModel):
-    protocolo: str = Field(min_length=1, max_length=40)
-    fiscal_nome: str = Field(max_length=80)
-    largura_calcada: float = Field(ge=0, le=50)
+class VistoriaRequest(Entrada):
+    protocolo: Texto = Field(min_length=1, max_length=40)
+    # o nome do fiscal vem do token da sessão; o valor enviado pela tela é ignorado
+    fiscal_nome: str = Field(default="", max_length=80)
+    largura_calcada: float = Field(ge=0, le=50, allow_inf_nan=False)
     faixa_livre_ok: bool
     equipamento_ok: bool
-    observacoes: str = Field(default="", max_length=1000)
+    observacoes: Texto = Field(default="", max_length=1000)
 
-class AcessoCarteiraRequest(BaseModel):
-    cpf: str = Field(min_length=11, max_length=14)
+class AcessoCarteiraRequest(Entrada):
+    cpf: str = Field(pattern=r"^(\d{11}|\d{3}\.\d{3}\.\d{3}-\d{2})$")
     data_nascimento: str = Field(pattern=r"^\d{2}/\d{2}/\d{4}$")
 
-class FiscalLoginRequest(BaseModel):
+class FiscalLoginRequest(Entrada):
     usuario: str = Field(min_length=1, max_length=60)
     senha: str = Field(min_length=1, max_length=128)
 
@@ -338,13 +367,15 @@ def robots():
 def obter_csrf():
     return {"token": security.gerar_csrf()}
 
-# código da consulta: data/hora + sequencial do dia
+# código da consulta: data/hora + sufixo aleatório. Com sequencial, bastava contar
+# 0001, 0002... para ler os endereços que outras pessoas consultaram.
 def gerar_codigo_consulta(db: Session):
     now = datetime.datetime.now()
     prefixo_data = now.strftime("%Y%m%d-%H%M")
-    inicio_dia = datetime.datetime(now.year, now.month, now.day)
-    count_hoje = db.query(models.Consulta).filter(models.Consulta.created_at >= inicio_dia).count() + 1
-    codigo = f"CNS-{prefixo_data}-{count_hoje:04d}"
+    for _ in range(5):
+        codigo = f"CNS-{prefixo_data}-{secrets.token_hex(8).upper()}"
+        if not db.query(models.Consulta.id).filter(models.Consulta.codigo_consulta == codigo).first():
+            break
     return codigo, now.strftime("%d/%m/%Y %H:%M:%S")
 
 # Vias estruturantes e corredores comerciais (Lei 13.123/2025)
@@ -401,6 +432,8 @@ def obter_nome_oficial_zona(zona_str: str) -> str:
 @app.post("/api/viabilidade")
 def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
     ponto = Point(req.longitude, req.latitude)
+    if not LIMITE_MUNICIPIO.contains(ponto):
+        raise HTTPException(status_code=422, detail="O ponto informado está fora do município de Sorocaba.")
     zona_encontrada = None
 
     # corredores têm prioridade sobre a zona em que estão inseridos
@@ -411,14 +444,6 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
             zona_encontrada = f"{sigla} - {nome_oficial}"
             break
 
-    # fora da faixa do eixo, tenta pelo nome da via
-    if not zona_encontrada:
-        logr_rua = req.logradouro.lower().split(",")[0].split("-")[0].strip()
-        for rua_chave, (sigla_c, nome_c) in MAPA_CORREDORES_VIARIOS.items():
-            if rua_chave in logr_rua:
-                zona_encontrada = nome_c
-                break
-
     if not zona_encontrada:
         for item in camada_zoneamento:
             if item["geometria"].contains(ponto):
@@ -426,11 +451,20 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
                 zona_encontrada = props.get("Name") or props.get("name") or props.get("ZONA") or props.get("zona") or "Zona Mista"
                 break
 
+    # O nome da via vem do navegador e não decide nada sozinho: só cobre falha de geocodificação,
+    # quando o ponto ficou fora dos polígonos mas perto de um corredor daquela mesma sigla.
     if not zona_encontrada:
-        if -23.4800 <= req.latitude <= -23.4700:
-            zona_encontrada = "ZR1 - Zona Residencial 1"
-        else:
-            zona_encontrada = "ZC - Zona Central"
+        logr_rua = req.logradouro.lower().split(",")[0].split("-")[0].strip()
+        for rua_chave, (sigla_c, nome_c) in MAPA_CORREDORES_VIARIOS.items():
+            if rua_chave in logr_rua and any(
+                c["sigla"] == sigla_c and c["geometria_linha"].distance(ponto) < DISTANCIA_NOME_VIA
+                for c in camada_corredores
+            ):
+                zona_encontrada = nome_c
+                break
+
+    if not zona_encontrada:
+        zona_encontrada = "ZM - Zona não mapeada"
 
     nome_oficial = obter_nome_oficial_zona(zona_encontrada)
 
@@ -554,7 +588,7 @@ def avaliar_viabilidade(req: ConsultaRequest, db: Session = Depends(get_db)):
     }
 
 @app.get("/api/consulta/{codigo_consulta}")
-def buscar_consulta(codigo_consulta: str = Path(pattern=r"^CNS-[0-9]{8}-[0-9]{4}-[0-9]{4,6}$"), db: Session = Depends(get_db)):
+def buscar_consulta(codigo_consulta: str = Path(pattern=r"^CNS-[0-9]{8}-[0-9]{4}-[0-9A-F]{4,16}$"), db: Session = Depends(get_db)):
     c = db.query(models.Consulta).filter(models.Consulta.codigo_consulta == codigo_consulta).first()
     if not c:
         raise HTTPException(status_code=404, detail="Consulta não encontrada no banco de dados.")
@@ -589,9 +623,21 @@ def assinar_qr(ambulante) -> str:
         "horario": ambulante.horario,
         "termino": ambulante.termino,
         "status": ambulante.status,
-        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=365)
+        "aud": AUD_QR,
+        "exp": fim_da_autorizacao(ambulante.termino)
     }
     return jwt.encode(payload_qr, security.SECRET_KEY, algorithm="HS256")
+
+AUD_QR = "consulta-sorocaba:qr-tau"
+
+def fim_da_autorizacao(termino: str) -> datetime.datetime:
+    # o QR não pode valer além do término da autorização, e no máximo 1 ano
+    limite = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=365)
+    try:
+        fim = datetime.datetime.strptime(termino, "%d/%m/%Y").replace(tzinfo=datetime.timezone.utc) + datetime.timedelta(days=1)
+    except (TypeError, ValueError):
+        return limite
+    return min(fim, limite)
 
 @app.post("/api/carteira/acesso")
 def acessar_carteira(req: AcessoCarteiraRequest, request: Request, db: Session = Depends(get_db)):
@@ -736,16 +782,35 @@ def fiscal_busca(
     }
 
 @app.post("/api/fiscal/validar-qr")
-def validar_qr_code(req: ValidarQRRequest, fiscal: dict = Depends(security.exigir_fiscal)):
+def validar_qr_code(req: ValidarQRRequest, db: Session = Depends(get_db), fiscal: dict = Depends(security.exigir_fiscal)):
     try:
-        decoded = jwt.decode(req.token, security.SECRET_KEY, algorithms=["HS256"])
+        decoded = jwt.decode(req.token, security.SECRET_KEY, algorithms=["HS256"], audience=AUD_QR)
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=400, detail="Licença expirada.")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=400, detail="QR Code inválido ou adulterado!")
-    if "numero_autorizacao" not in decoded:
-        raise HTTPException(status_code=400, detail="QR Code inválido ou adulterado!")
-    decoded.pop("exp", None)
+
+    # a assinatura prova que o QR foi emitido aqui; a situação atual vem do cadastro,
+    # para que uma autorização cassada ou vencida não continue valendo pelo QR antigo
+    ambulante = db.query(models.Ambulante).filter(
+        models.Ambulante.numero_autorizacao == decoded.get("numero_autorizacao")
+    ).first()
+    if not ambulante:
+        raise HTTPException(status_code=400, detail="Autorização não encontrada no cadastro.")
+    if str(ambulante.status).lower() != "ativo":
+        raise HTTPException(status_code=400, detail=f"Autorização com situação '{ambulante.status}'.")
+    if fim_da_autorizacao(ambulante.termino) < datetime.datetime.now(datetime.timezone.utc):
+        raise HTTPException(status_code=400, detail="Autorização vencida.")
+
+    for campo in ("exp", "aud"):
+        decoded.pop(campo, None)
+    decoded.update({
+        "titular": ambulante.nome,
+        "local": ambulante.local_autorizado,
+        "categoria": ambulante.categoria,
+        "status": ambulante.status,
+        "termino": ambulante.termino,
+    })
     return {
         "valido": True,
         "mensagem": "AUTORIZAÇÃO AUTÊNTICA E VÁLIDA",
@@ -754,7 +819,9 @@ def validar_qr_code(req: ValidarQRRequest, fiscal: dict = Depends(security.exigi
 
 @app.post("/api/fiscal/vistoria")
 def registrar_vistoria(req: VistoriaRequest, fiscal: dict = Depends(security.exigir_fiscal)):
+    log.info("Vistoria do protocolo %s registrada por %s", req.protocolo, fiscal.get("nome"))
     return {
+        "fiscal": fiscal.get("nome"),
         "status": "sucesso",
         "mensagem": f"Vistoria do protocolo {req.protocolo} registrada com sucesso!",
         "data_registro": datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
