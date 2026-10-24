@@ -15,6 +15,7 @@ import logging
 import os
 import secrets
 import unicodedata
+from contextlib import asynccontextmanager
 from shapely.geometry import box, shape, Point
 
 log = logging.getLogger("uvicorn.error")
@@ -23,11 +24,18 @@ models.Base.metadata.create_all(bind=engine)
 
 # a documentação automática expõe o mapa da API; só fica ligada com API_DOCS=1
 docs_ativos = os.environ.get("API_DOCS") == "1"
+
+@asynccontextmanager
+async def ciclo_de_vida(app: FastAPI):
+    popular_banco_de_teste()
+    yield
+
 app = FastAPI(
     title="API Sistema de Viabilidade Comercial - Consulta Sorocaba",
     docs_url="/docs" if docs_ativos else None,
     redoc_url=None,
     openapi_url="/openapi.json" if docs_ativos else None,
+    lifespan=ciclo_de_vida,
 )
 
 # o CORS precisa ser registrado por último para envolver também as respostas 403/429 do middleware de proteção
@@ -125,8 +133,7 @@ if os.path.exists(CORREDORES_GEOJSON_PATH):
         log.warning("Erro ao carregar GeoJSON de corredores: %s", e)
 
 # Cadastro fictício usado nos testes da carteira e da fiscalização
-@app.on_event("startup")
-def startup_populate_db():
+def popular_banco_de_teste():
     db = Session(bind=engine)
     try:
         db.query(models.Ambulante).delete()
