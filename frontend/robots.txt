@@ -2,16 +2,19 @@
 # Paginas publicas podem ser indexadas; areas restritas e arquivos de dados, nao.
 
 User-agent: *
-Allow: /$
+Allow: /
 Allow: /index.html
-Allow: /consulta.html$
+Allow: /consulta.html
 Allow: /glossario.html
+Allow: /css/
+Allow: /js/
+Allow: /img/
 Disallow: /Fiscal.html
 Disallow: /carteira.html
-Disallow: /consulta.html?
-Disallow: /js/
 Disallow: /*.json$
-Crawl-delay: 10
+
+# Mapa do site para mecanismos de busca
+Sitemap: https://consultasorocaba.site/sitemap.xml
 
 # Coletores para treino de IA e raspagem de conteudo
 User-agent: GPTBot
